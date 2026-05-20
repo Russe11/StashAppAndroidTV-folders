@@ -108,12 +108,15 @@ fun FoldersPage(
                     .fillMaxWidth()
                     .fillMaxHeight(),
         ) {
-            // Left pane: column tree (~30% of width on a typical 16:9 TV).
+            // Left pane: column tree. Wider than the scene grid because folder
+            // navigation is the primary action; on a 960dp logical-width TV this
+            // is the difference between fitting two readable columns and clipping
+            // the focused one off-screen.
             Box(
                 modifier =
                     Modifier
                         .fillMaxHeight()
-                        .weight(0.36f),
+                        .weight(0.45f),
             ) {
                 FolderTreeColumns(
                     columnStack = columnStack,
@@ -134,7 +137,7 @@ fun FoldersPage(
                 modifier =
                     Modifier
                         .fillMaxHeight()
-                        .weight(0.64f),
+                        .weight(0.55f),
             ) {
                 FolderSceneGrid(
                     items = pagingItems,

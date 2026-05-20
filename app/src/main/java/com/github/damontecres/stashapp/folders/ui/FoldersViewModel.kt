@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -68,9 +69,10 @@ class FoldersViewModel : ViewModel() {
      * latch onto a blank server URL and never recover.
      */
     fun observeColumn(parentPath: String): Flow<List<FolderNode>> =
-        _serverUrl.flatMapLatest { server ->
-            if (server.isBlank()) flowOf(emptyList()) else dao.observeChildren(server, parentPath)
-        }
+        _serverUrl
+            .flatMapLatest { server ->
+                if (server.isBlank()) flowOf(emptyList()) else dao.observeChildren(server, parentPath)
+            }.distinctUntilChanged()
 
     /**
      * Drill into [folder]: push a new column showing its children. No-op if the

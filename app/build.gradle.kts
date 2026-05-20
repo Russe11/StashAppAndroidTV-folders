@@ -5,6 +5,7 @@ import com.android.build.gradle.internal.tasks.factory.dependsOn
 import com.google.protobuf.gradle.id
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Base64
+import java.util.Properties
 
 val isCI = providers.environmentVariable("CI").orElse("false").map { it.toBoolean() }
 val shouldSign =
@@ -13,6 +14,12 @@ val shouldSign =
     ) { isCI, hasKey ->
         isCI && hasKey
     }
+
+val localKeystoreProps: Properties? =
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+        Properties().apply { f.inputStream().use { stream -> load(stream) } }
+    }
+val hasLocalSigning: Boolean = localKeystoreProps != null
 val ffmpegModuleExists =
     providers.provider { project.file("libs/lib-decoder-ffmpeg-release.aar").exists() }
 val av1ModuleExists =
@@ -95,6 +102,19 @@ configure<ApplicationExtension> {
                 enableV4Signing = true
             }
         }
+        if (hasLocalSigning) {
+            create("local") {
+                val props = localKeystoreProps!!
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
     }
 
     buildTypes {
@@ -108,6 +128,8 @@ configure<ApplicationExtension> {
 
             if (shouldSign.get()) {
                 signingConfig = signingConfigs.getByName("ci")
+            } else if (hasLocalSigning) {
+                signingConfig = signingConfigs.getByName("local")
             }
         }
         debug {

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,8 +54,12 @@ import com.github.damontecres.stashapp.folders.data.FolderNode
  * plus a small breadcrumb summarising the hidden depth, so very deep trees don't
  * pancake into unreadable thin strips on a 10-foot UI.
  */
-private const val MAX_VISIBLE_COLUMNS = 4
-private const val COLUMN_WIDTH_DP = 240
+// Two visible columns max so each gets a readable share of the tree pane on a
+// 432dp-wide pane (45% of a 960dp logical-width TV). Older depths collapse into
+// the breadcrumb chip on the left so the rightmost — focused — column is always
+// fully on-screen. Increasing this without re-thinking the layout puts focus
+// off the edge again.
+private const val MAX_VISIBLE_COLUMNS = 2
 
 @Composable
 fun FolderTreeColumns(
@@ -104,7 +108,7 @@ fun FolderTreeColumns(
                 focusRequester = perColumnFocus,
                 modifier =
                     Modifier
-                        .width(COLUMN_WIDTH_DP.dp)
+                        .weight(1f, fill = true)
                         .fillMaxHeight(),
             )
         }
@@ -188,8 +192,7 @@ private fun FolderTreeColumn(
                         .fillMaxHeight()
                         .let { m -> if (focusRequester != null) m.focusRequester(focusRequester) else m },
             ) {
-                items(items = children, key = { it.path }) { node ->
-                    val index = children.indexOf(node)
+                itemsIndexed(items = children, key = { _, node -> node.path }) { index, node ->
                     val isFocused = index == focusedIndex
                     val itemMod =
                         if (isFocused) Modifier.focusRequester(firstItemFocus) else Modifier
