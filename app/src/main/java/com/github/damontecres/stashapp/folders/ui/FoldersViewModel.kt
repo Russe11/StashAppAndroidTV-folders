@@ -60,12 +60,17 @@ class FoldersViewModel : ViewModel() {
         }
     }
 
-    /** Observe the list of children for a given column (by parent path). */
-    fun observeColumn(parentPath: String): Flow<List<FolderNode>> {
-        val server = _serverUrl.value
-        if (server.isBlank()) return flowOf(emptyList())
-        return dao.observeChildren(server, parentPath)
-    }
+    /**
+     * Observe the list of children for a given column (by parent path).
+     *
+     * Must be reactive to [_serverUrl] — the first composition runs before
+     * [bindServer] fires from `LaunchedEffect`, so a one-shot snapshot would
+     * latch onto a blank server URL and never recover.
+     */
+    fun observeColumn(parentPath: String): Flow<List<FolderNode>> =
+        _serverUrl.flatMapLatest { server ->
+            if (server.isBlank()) flowOf(emptyList()) else dao.observeChildren(server, parentPath)
+        }
 
     /**
      * Drill into [folder]: push a new column showing its children. No-op if the
