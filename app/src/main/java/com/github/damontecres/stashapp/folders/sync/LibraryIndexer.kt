@@ -396,57 +396,18 @@ class LibraryIndexer(
     private suspend fun collectParentPaths(): List<String> = dao.allParentPathsForServer(server.url)
 
     // -- Path helpers ---------------------------------------------------------------------
+    //
+    // Thin instance-method shims so existing call sites stay readable. The
+    // real logic lives in the companion object so it can be unit-tested
+    // without standing up the rest of the indexer.
 
-    /**
-     * Normalize a Stash-reported file path: backslashes → forward slashes, collapse runs
-     * of `/` to a single `/`, strip trailing whitespace. The canonical absolute path
-     * (e.g. `/mnt/movies/Foo/scene.mp4`) is returned unchanged otherwise.
-     */
-    internal fun normalizeFilePath(raw: String): String {
-        if (raw.isBlank()) return ""
-        val swapped = raw.trim().replace('\\', '/')
-        // Collapse repeated slashes but preserve a leading `/` if present.
-        val collapsed = swapped.replace(SLASH_RUN_REGEX, "/")
-        return collapsed
-    }
+    internal fun normalizeFilePath(raw: String): String = Companion.normalizeFilePath(raw)
 
-    /**
-     * Derive the canonical parent folder of a normalized file path. Always trailing-slash
-     * terminated; root is `"/"`.
-     */
-    internal fun parentPathOf(normalizedPath: String): String {
-        if (normalizedPath.isBlank()) return "/"
-        val lastSlash = normalizedPath.lastIndexOf('/')
-        if (lastSlash < 0) return "/"
-        if (lastSlash == 0) return "/" // path was "/foo"
-        val parent = normalizedPath.substring(0, lastSlash)
-        // Ensure leading + trailing slash. `parent` already has a leading `/` if the
-        // input did; otherwise prepend one.
-        val withLeading = if (parent.startsWith("/")) parent else "/$parent"
-        return "$withLeading/"
-    }
+    internal fun parentPathOf(normalizedPath: String): String = Companion.parentPathOf(normalizedPath)
 
-    /**
-     * Parent folder of a folder. `parentFolderOf("/a/b/")` is `"/a/"`,
-     * `parentFolderOf("/a/")` is `"/"`, and `parentFolderOf("/")` is `"/"`.
-     */
-    internal fun parentFolderOf(folderPath: String): String {
-        if (folderPath == "/" || folderPath.isBlank()) return "/"
-        val trimmed = folderPath.trimEnd('/')
-        val lastSlash = trimmed.lastIndexOf('/')
-        if (lastSlash <= 0) return "/"
-        return trimmed.substring(0, lastSlash) + "/"
-    }
+    internal fun parentFolderOf(folderPath: String): String = Companion.parentFolderOf(folderPath)
 
-    /**
-     * Display name of a folder. Root is `""`.
-     */
-    internal fun folderName(folderPath: String): String {
-        if (folderPath == "/" || folderPath.isBlank()) return ""
-        val trimmed = folderPath.trimEnd('/')
-        val lastSlash = trimmed.lastIndexOf('/')
-        return if (lastSlash < 0) trimmed else trimmed.substring(lastSlash + 1)
-    }
+    internal fun folderName(folderPath: String): String = Companion.folderName(folderPath)
 
     // -- Time helpers ---------------------------------------------------------------------
 
@@ -484,5 +445,67 @@ class LibraryIndexer(
         private const val PAGE_SIZE = 1000
         private const val SORT_FIELD = "updated_at"
         private val SLASH_RUN_REGEX = Regex("/+")
+
+        /**
+         * Normalize a Stash-reported file path: backslashes → forward slashes,
+         * collapse runs of `/` to a single `/`, strip surrounding whitespace,
+         * and **ensure a leading slash** so the canonical absolute path
+         * (e.g. `/mnt/movies/Foo/scene.mp4`) is returned regardless of whether
+         * the source string included one.
+         *
+         * The leading-slash guarantee is what keeps the folder browser query
+         * (`path LIKE :pathPrefix || '%'`) and the canonical [parentPathOf]
+         * output (always `/`-prefixed) in lockstep. Stash returns some paths
+         * without a leading `/` (e.g. `prv/docs/foo.mp4`), and if we faithfully
+         * stored those they'd never match a prefix derived from the folders
+         * table — which is how the bug manifested before this fix.
+         */
+        internal fun normalizeFilePath(raw: String): String {
+            if (raw.isBlank()) return ""
+            val swapped = raw.trim().replace('\\', '/')
+            // Collapse repeated slashes (preserving a single leading `/` if present).
+            val collapsed = swapped.replace(SLASH_RUN_REGEX, "/")
+            if (collapsed.isEmpty()) return ""
+            return if (collapsed.startsWith("/")) collapsed else "/$collapsed"
+        }
+
+        /**
+         * Derive the canonical parent folder of a normalized file path. Always
+         * trailing-slash terminated; root is `"/"`.
+         */
+        internal fun parentPathOf(normalizedPath: String): String {
+            if (normalizedPath.isBlank()) return "/"
+            val lastSlash = normalizedPath.lastIndexOf('/')
+            if (lastSlash < 0) return "/"
+            if (lastSlash == 0) return "/" // path was "/foo"
+            val parent = normalizedPath.substring(0, lastSlash)
+            // Ensure leading + trailing slash. `parent` already has a leading
+            // `/` if the input did (which it always should after
+            // `normalizeFilePath`); we keep the prepend as belt-and-braces.
+            val withLeading = if (parent.startsWith("/")) parent else "/$parent"
+            return "$withLeading/"
+        }
+
+        /**
+         * Parent folder of a folder. `parentFolderOf("/a/b/")` is `"/a/"`,
+         * `parentFolderOf("/a/")` is `"/"`, and `parentFolderOf("/")` is `"/"`.
+         */
+        internal fun parentFolderOf(folderPath: String): String {
+            if (folderPath == "/" || folderPath.isBlank()) return "/"
+            val trimmed = folderPath.trimEnd('/')
+            val lastSlash = trimmed.lastIndexOf('/')
+            if (lastSlash <= 0) return "/"
+            return trimmed.substring(0, lastSlash) + "/"
+        }
+
+        /**
+         * Display name of a folder. Root is `""`.
+         */
+        internal fun folderName(folderPath: String): String {
+            if (folderPath == "/" || folderPath.isBlank()) return ""
+            val trimmed = folderPath.trimEnd('/')
+            val lastSlash = trimmed.lastIndexOf('/')
+            return if (lastSlash < 0) trimmed else trimmed.substring(lastSlash + 1)
+        }
     }
 }

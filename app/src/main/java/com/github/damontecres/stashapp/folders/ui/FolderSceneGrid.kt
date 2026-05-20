@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.paging.compose.itemKey
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +20,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.folders.data.FolderScene
 import androidx.compose.ui.focus.FocusRequester
+import com.github.damontecres.stashapp.ui.ComposeUiConfig
 
 /**
  * Right-pane scene grid. Backed by a Paging-Compose [LazyPagingItems] over the
@@ -33,6 +35,7 @@ fun FolderSceneGrid(
     items: LazyPagingItems<FolderScene>,
     selectedPath: String?,
     onSceneClick: (FolderScene) -> Unit,
+    uiConfig: ComposeUiConfig,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
 ) {
@@ -73,12 +76,22 @@ fun FolderSceneGrid(
                             .fillMaxSize()
                             .let { m -> if (focusRequester != null) m.focusRequester(focusRequester) else m },
                 ) {
-                    items(pagingItems.itemCount) { index ->
+                    // Stable item identity via `key` lets the lazy grid reuse
+                    // existing slots when paging appends new items, instead of
+                    // throwing away the whole grid and rebuilding it. Stable
+                    // `contentType` lets it pool composable instances — every
+                    // card is the same shape, so one pool serves all rows.
+                    items(
+                        count = pagingItems.itemCount,
+                        key = pagingItems.itemKey { it.sceneId },
+                        contentType = { "scene_card" },
+                    ) { index ->
                         val scene = pagingItems[index]
                         if (scene != null) {
                             FolderSceneCard(
                                 scene = scene,
                                 onClick = { onSceneClick(scene) },
+                                uiConfig = uiConfig,
                             )
                         }
                     }

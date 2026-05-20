@@ -224,7 +224,7 @@ class SettingsFragment : LeanbackSettingsFragmentCompat() {
                     viewLifecycleOwner.lifecycleScope.launch(StashCoroutineExceptionHandler()) {
                         val release = UpdateChecker.getLatestRelease(requireContext(), updateUrl)
                         if (release != null) {
-                            if (release.version.isGreaterThan(installedVersion)) {
+                            if (release.version.isAppUpdateFor(installedVersion)) {
                                 serverViewModel.navigationManager.navigate(
                                     Destination.UpdateApp(
                                         release,
@@ -318,7 +318,7 @@ class SettingsFragment : LeanbackSettingsFragmentCompat() {
                     val release = UpdateChecker.getLatestRelease(requireContext(), updateUrl)
                     val installedVersion = UpdateChecker.getInstalledVersion(requireActivity())
                     if (release != null) {
-                        if (release.version.isGreaterThan(installedVersion)) {
+                        if (release.version.isAppUpdateFor(installedVersion)) {
                             updatePrefs.forEach {
                                 it?.title = "Install update"
                                 it?.summary =

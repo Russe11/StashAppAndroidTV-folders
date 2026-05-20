@@ -1,5 +1,8 @@
 package com.github.damontecres.stashapp.folders.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,11 +16,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -27,6 +41,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.data.DataType
+import com.github.damontecres.stashapp.folders.data.FolderListRow
 import com.github.damontecres.stashapp.folders.data.FolderScene
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
@@ -38,17 +53,24 @@ import com.github.damontecres.stashapp.util.StashServer
 import kotlinx.coroutines.launch
 
 /**
- * The "Folders" top-level destination — a Stash-library folder-tree browser
- * backed by the local Room cache populated by `LibraryIndexer`.
+ * The "Folders" top-level destination — a Stash-library folder browser backed
+ * by the local Room cache populated by `LibraryIndexer`.
  *
  * Three regions:
  *  1. Top bar: progress chip while a sync is in flight + a "Force resync" button.
- *  2. Left pane: NeXTSTEP/Finder-style column tree, D-pad navigable.
- *  3. Right pane: paging scene grid for the activated folder.
+ *  2. Left pane: single-level subfolder list for the current folder, with a `..`
+ *     row pinned at the top when not at root. See [FolderListPane].
+ *  3. Right pane: paging scene grid for the current folder (recursive).
  *
- * The grid is driven by `FoldersViewModel.scenesFlow`, which keys off the
- * currently-selected folder path; activating a different folder re-keys Paging
- * and the grid refreshes.
+ * Navigation is host-driven: this composable owns a `focusedRowIndex` and
+ * dispatches D-pad input from a root-level `onPreviewKeyEvent` handler. Doing
+ * it that way avoids the LazyColumn-on-TV focus-timing problems we ran into
+ * during the prototype — see the comment block in [FolderListPane] for the
+ * full story.
+ *
+ * Hardware Back: handled here by [BackHandler], which calls
+ * [FoldersViewModel.goUp]. When already at the root the handler is disabled so
+ * the host nav controller can pop the destination as usual.
  */
 @Composable
 fun FoldersPage(
@@ -70,27 +92,136 @@ fun FoldersPage(
         viewModel.bindServer(server.url)
     }
 
-    val columnStack by viewModel.columnStack.collectAsState()
-    val selectedPath by viewModel.selectedPath.collectAsState()
+    val currentPath by viewModel.currentPath.collectAsState()
     val syncProgress by viewModel.syncProgress.collectAsState()
     val pagingItems = viewModel.scenesFlow.collectAsLazyPagingItems()
 
     val coroutineScope = rememberCoroutineScope()
-    val gridFocusRequester = remember { FocusRequester() }
-    val treeFocusRequester = remember { FocusRequester() }
 
-    // Scene click → navigate to the Stash item page. We bypass the generic
-    // ItemOnClicker because `FolderScene` isn't one of the data types it knows
-    // about; the destination's `Destination.Item(DataType.SCENE, id)` is the
-    // canonical entrypoint regardless.
+    val childrenSnapshot: FolderChildrenSnapshot? by produceState<FolderChildrenSnapshot?>(
+        initialValue = null,
+        currentPath,
+    ) {
+        value = null
+        viewModel.observeChildren(currentPath).collect { value = FolderChildrenSnapshot(currentPath, it) }
+    }
+    val childList =
+        visibleChildrenForPath(
+            currentPath = currentPath,
+            snapshotPath = childrenSnapshot?.path,
+            children = childrenSnapshot?.children,
+        )
+    val showParent = currentPath != FoldersViewModel.ROOT_PARENT
+    val rowCount = folderRowCount(showParent, childList)
+
+    var focusedRowIndex by rememberSaveable(currentPath) { mutableIntStateOf(0) }
+    LaunchedEffect(rowCount) {
+        if (focusedRowIndex >= rowCount) {
+            focusedRowIndex = (rowCount - 1).coerceAtLeast(0)
+        }
+    }
+
+    // Which pane currently owns input focus. Left = the host-driven subfolder
+    // list (see FolderListPane); Right = the scene grid (Compose-focus-managed
+    // via TV Card composables). DPAD_RIGHT from the left pane transfers to
+    // Right; hardware Back / DPAD_LEFT from the right pane returns to Left.
+    var paneFocus by remember { mutableStateOf(PaneFocus.Left) }
+
+    // Hardware Back: in the Right pane it returns to Left (so the user can
+    // keep browsing folders); in the Left pane it goes up one folder, and at
+    // root the handler is disabled so the host nav controller pops the
+    // destination as usual.
+    BackHandler(
+        enabled = paneFocus == PaneFocus.Right || currentPath != FoldersViewModel.ROOT_PARENT,
+    ) {
+        if (paneFocus == PaneFocus.Right) {
+            paneFocus = PaneFocus.Left
+        } else {
+            viewModel.goUp()
+        }
+    }
+
     val onSceneClick: (FolderScene) -> Unit = { scene ->
         navigationManager.navigate(Destination.Item(DataType.SCENE, scene.sceneId))
+    }
+
+    val rootFocus = remember { FocusRequester() }
+    val sceneGridFocus = remember { FocusRequester() }
+    // Re-claim focus on the root whenever we transition back to the Left pane
+    // (e.g. after Back from the scene grid). Without this the focus stays on
+    // wherever the grid put it, and our root onPreviewKeyEvent never fires
+    // because the focused node is in a different subtree.
+    LaunchedEffect(paneFocus) {
+        if (paneFocus == PaneFocus.Left) {
+            runCatching { rootFocus.requestFocus() }
+        }
     }
 
     Column(
         modifier =
             modifier
-                .fillMaxSize(),
+                .fillMaxSize()
+                .focusRequester(rootFocus)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) {
+                        return@onPreviewKeyEvent false
+                    }
+                    // In the Right pane, let Compose's TV-Card focus handle
+                    // DPad navigation inside the scene grid; only intercept
+                    // Left as the "back to folders" escape hatch. Everything
+                    // else (Up/Down/Center/Enter) falls through to the grid.
+                    if (paneFocus == PaneFocus.Right) {
+                        return@onPreviewKeyEvent when (event.key) {
+                            Key.DirectionLeft -> {
+                                paneFocus = PaneFocus.Left
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    when (event.key) {
+                        Key.DirectionUp -> {
+                            if (focusedRowIndex > 0) focusedRowIndex--
+                            true
+                        }
+
+                        Key.DirectionDown -> {
+                            if (focusedRowIndex < rowCount - 1) focusedRowIndex++
+                            true
+                        }
+
+                        Key.DirectionLeft -> {
+                            viewModel.goUp()
+                            true
+                        }
+
+                        Key.DirectionRight -> {
+                            // Transfer focus to the scene grid — only if it
+                            // has something focusable. When the folder is
+                            // empty the grid renders a placeholder Text and
+                            // requestFocus would throw IllegalStateException.
+                            if (pagingItems.itemCount > 0) {
+                                paneFocus = PaneFocus.Right
+                                runCatching { sceneGridFocus.requestFocus() }
+                            }
+                            true
+                        }
+
+                        Key.DirectionCenter, Key.Enter -> {
+                            when (val target =
+                                folderRowTargetAt(showParent, focusedRowIndex, childList)) {
+                                FolderRowTarget.GoUp -> viewModel.goUp()
+                                is FolderRowTarget.Enter -> viewModel.enterFolder(target.node)
+                                null -> { /* nothing to do */
+                                }
+                            }
+                            true
+                        }
+
+                        else -> false
+                    }
+                },
     ) {
         FoldersTopBar(
             progress = syncProgress,
@@ -108,48 +239,66 @@ fun FoldersPage(
                     .fillMaxWidth()
                     .fillMaxHeight(),
         ) {
-            // Left pane: column tree. Wider than the scene grid because folder
-            // navigation is the primary action; on a 960dp logical-width TV this
-            // is the difference between fitting two readable columns and clipping
-            // the focused one off-screen.
             Box(
                 modifier =
                     Modifier
                         .fillMaxHeight()
-                        .weight(0.45f),
+                        .weight(0.30f),
             ) {
-                FolderTreeColumns(
-                    columnStack = columnStack,
-                    observeColumn = viewModel::observeColumn,
-                    onDrillIn = viewModel::pushColumn,
-                    onDrillOut = { viewModel.popColumn() },
-                    onActivate = viewModel::selectFolder,
-                    onMoveFocusToGrid = {
-                        runCatching { gridFocusRequester.requestFocus() }
-                    },
-                    treeFocusRequester = treeFocusRequester,
+                FolderListPane(
+                    currentPath = currentPath,
+                    children = childList,
+                    focusedRowIndex = focusedRowIndex,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
 
-            // Right pane: paging scene grid.
             Box(
                 modifier =
                     Modifier
                         .fillMaxHeight()
-                        .weight(0.55f),
+                        .weight(0.70f),
             ) {
                 FolderSceneGrid(
                     items = pagingItems,
-                    selectedPath = selectedPath,
+                    selectedPath = currentPath,
                     onSceneClick = onSceneClick,
-                    focusRequester = gridFocusRequester,
+                    uiConfig = uiConfig,
+                    focusRequester = sceneGridFocus,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
         }
     }
 }
+
+/**
+ * Which of the two panes currently owns input focus.
+ *
+ * The Left pane (subfolder list) uses host-driven navigation via
+ * [androidx.compose.ui.input.key.onPreviewKeyEvent] on a focusable root, so
+ * DPad input is processed in this composable. The Right pane (scene grid)
+ * delegates to Compose's native focus on TV Cards, so the root keyhandler
+ * passes most events through. Tracking this state explicitly lets us route
+ * Back / DPAD_LEFT correctly depending on which pane is active.
+ */
+private enum class PaneFocus { Left, Right }
+
+private data class FolderChildrenSnapshot(
+    val path: String,
+    val children: List<FolderListRow>,
+)
+
+internal fun visibleChildrenForPath(
+    currentPath: String,
+    snapshotPath: String?,
+    children: List<FolderListRow>?,
+): List<FolderListRow>? =
+    if (snapshotPath == currentPath) {
+        children
+    } else {
+        null
+    }
 
 @Composable
 private fun FoldersTopBar(

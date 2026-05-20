@@ -212,6 +212,20 @@ class AppUpgradeHandler(
                 }
             }
         }
+
+        val updateUrlKey = context.getString(R.string.pref_key_update_url)
+        if (preferences.getString(updateUrlKey, null) == StashPreference.LEGACY_DEFAULT_UPDATE_URL) {
+            preferences.edit(true) {
+                putString(updateUrlKey, StashPreference.DEFAULT_UPDATE_URL)
+            }
+        }
+        CoroutineScope(Dispatchers.IO + StashCoroutineExceptionHandler()).launch {
+            context.preferences.updateData {
+                it.updateUpdatePreferences {
+                    updateUrl = migrateDefaultUpdateUrl(updateUrl)
+                }
+            }
+        }
     }
 
     private fun SharedPreferences.ensureSetHas(
@@ -235,6 +249,13 @@ class AppUpgradeHandler(
 
     companion object {
         private const val TAG = "AppUpgradeHandler"
+
+        fun migrateDefaultUpdateUrl(updateUrl: String): String =
+            if (updateUrl == StashPreference.LEGACY_DEFAULT_UPDATE_URL) {
+                StashPreference.DEFAULT_UPDATE_URL
+            } else {
+                updateUrl
+            }
 
         /**
          * Migrate preferences from SharedPreferences to Proto DataStore.

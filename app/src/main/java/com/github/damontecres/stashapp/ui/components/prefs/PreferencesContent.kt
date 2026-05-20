@@ -262,7 +262,7 @@ fun PreferencesContent(
     val installedVersion = remember { UpdateChecker.getInstalledVersion(context) }
     var updateVersion by remember { mutableStateOf<Release?>(null) }
     val updateAvailable =
-        remember(updateVersion) { updateVersion?.version?.isGreaterThan(installedVersion) == true }
+        remember(updateVersion) { updateVersion?.version?.isAppUpdateFor(installedVersion) == true }
 
     if (preferences.updatePreferences.checkForUpdates) {
         LaunchedEffect(Unit) {

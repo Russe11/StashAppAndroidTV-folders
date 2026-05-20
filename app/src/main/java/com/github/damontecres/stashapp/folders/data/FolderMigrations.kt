@@ -73,3 +73,37 @@ val MIGRATION_5_TO_6 =
             )
         }
     }
+
+/**
+ * Adds two composite indexes that the Folders queries already lean on:
+ *
+ *   - `folder_scenes(serverUrl, path)`: the recursive scene query does
+ *     `WHERE serverUrl = ? AND path LIKE :pathPrefix || '%'`. With only the
+ *     single-column `path` index, SQLite walks every row matching the prefix
+ *     across *all* servers and then re-filters by serverUrl in memory.
+ *   - `folders(serverUrl, name)`: the left-pane subfolder list orders by
+ *     `name COLLATE NOCASE`. Without this index Room builds a transient sort
+ *     buffer for each folder change.
+ *
+ * Strictly additive. If this migration is skipped, queries still work — they
+ * just fall back to the v6 indexes — so `fallbackToDestructiveMigration()` is
+ * still acceptable as a safety net.
+ *
+ * WIRING REQUIRED: must be passed to the database builder in
+ * `StashApplication.kt`:
+ *
+ *     .addMigrations(MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7)
+ */
+val MIGRATION_6_TO_7 =
+    object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_path` " +
+                    "ON `folder_scenes` (`serverUrl`, `path`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folders_serverUrl_name` " +
+                    "ON `folders` (`serverUrl`, `name`)",
+            )
+        }
+    }

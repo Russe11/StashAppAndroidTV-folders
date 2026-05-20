@@ -72,4 +72,27 @@ class VersionCompareTests {
 
         Assert.assertFalse(V_0_2_0.isLessThan(V_0_1_1))
     }
+
+    @Test
+    fun testBranchLabeledGitVersion() {
+        val version = Version.fromString("0.1.0-folders-2-gdff9bedc")
+
+        Assert.assertEquals(0, version.major)
+        Assert.assertEquals(1, version.minor)
+        Assert.assertEquals(0, version.patch)
+        Assert.assertEquals("folders", version.fork)
+        Assert.assertEquals(2, version.numCommits)
+        Assert.assertEquals("dff9bedc", version.hash)
+        Assert.assertEquals("v0.1.0-folders-2-gdff9bedc", version.toString())
+    }
+
+    @Test
+    fun testAppUpdatesMustStayOnSameFork() {
+        val installed = Version.fromString("0.1.0-folders-2-gdff9bedc")
+
+        Assert.assertTrue(Version.fromString("0.1.0-folders-3-gaaaaaaaa").isAppUpdateFor(installed))
+        Assert.assertFalse(Version.fromString("0.1.0-other-3-gaaaaaaaa").isAppUpdateFor(installed))
+        Assert.assertFalse(Version.fromString("0.2.0-3-gaaaaaaaa").isAppUpdateFor(installed))
+        Assert.assertTrue(Version.fromString("0.2.0-3-gaaaaaaaa").isGreaterThan(installed))
+    }
 }

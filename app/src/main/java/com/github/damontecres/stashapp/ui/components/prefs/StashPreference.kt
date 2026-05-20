@@ -91,6 +91,8 @@ sealed interface StashPreference<T> {
 
     companion object {
         private const val TAG = "StashPreference"
+        const val LEGACY_DEFAULT_UPDATE_URL = "https://api.github.com/repos/damontecres/StashAppAndroidTV/releases/latest"
+        const val DEFAULT_UPDATE_URL = "https://api.github.com/repos/Russe11/StashAppAndroidTV-folders/releases/latest"
 
         // Basic
         val CurrentServer =
@@ -1223,7 +1225,7 @@ sealed interface StashPreference<T> {
             StashStringPreference(
                 title = R.string.update_url,
                 prefKey = R.string.pref_key_update_url,
-                defaultValue = "https://api.github.com/repos/damontecres/StashAppAndroidTV/releases/latest",
+                defaultValue = DEFAULT_UPDATE_URL,
                 getter = { it.updatePreferences.updateUrl },
                 setter = { prefs, value ->
                     prefs.updateUpdatePreferences { updateUrl = value }

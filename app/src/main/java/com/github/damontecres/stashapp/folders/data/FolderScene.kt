@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.folders.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
@@ -29,8 +30,17 @@ import androidx.room.Index
         Index(value = ["path"]),
         Index(value = ["parentPath"]),
         Index(value = ["serverUrl", "parentPath"]),
+        // Speeds up the recursive scene query, which does
+        // `WHERE serverUrl = ? AND path LIKE :pathPrefix || '%'`. Without this
+        // composite index Room falls back to the single-column `path` index and
+        // then filters by serverUrl in memory.
+        Index(value = ["serverUrl", "path"]),
     ],
 )
+// @Immutable lets Compose skip recomposition of any composable that takes a
+// FolderScene as a parameter when the *reference* is unchanged. We mutate via
+// data-class `copy`, never in place, so the contract holds.
+@Immutable
 data class FolderScene(
     val serverUrl: String,
     val sceneId: String,

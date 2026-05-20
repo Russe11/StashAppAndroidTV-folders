@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.folders.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.Index
 
@@ -22,8 +23,14 @@ import androidx.room.Index
     indices = [
         Index(value = ["parentPath"]),
         Index(value = ["serverUrl", "parentPath"]),
+        // The left-pane query orders by `name COLLATE NOCASE`. A composite
+        // index on (serverUrl, name) lets SQLite walk the index in order
+        // instead of building a transient sort table per folder change.
+        Index(value = ["serverUrl", "name"]),
     ],
 )
+// See FolderScene for the @Immutable rationale.
+@Immutable
 data class FolderNode(
     val serverUrl: String,
     val path: String,

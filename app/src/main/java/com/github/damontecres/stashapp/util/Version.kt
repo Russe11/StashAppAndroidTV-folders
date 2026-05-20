@@ -8,6 +8,7 @@ data class Version(
     val major: Int,
     val minor: Int,
     val patch: Int,
+    val fork: String? = null,
     val numCommits: Int? = null,
     val hash: String? = null,
 ) {
@@ -55,6 +56,8 @@ data class Version(
         return false
     }
 
+    fun isAppUpdateFor(installedVersion: Version): Boolean = fork == installedVersion.fork && isGreaterThan(installedVersion)
+
     /**
      * Is this less than the given version (and not equal to!)
      */
@@ -69,13 +72,15 @@ data class Version(
 
     override fun toString(): String =
         if (numCommits != null && hash != null) {
-            "v$major.$minor.$patch-$numCommits-g$hash"
+            val forkSuffix = fork?.let { "-$it" }.orEmpty()
+            "v$major.$minor.$patch$forkSuffix-$numCommits-g$hash"
         } else {
-            "v$major.$minor.$patch"
+            val forkSuffix = fork?.let { "-$it" }.orEmpty()
+            "v$major.$minor.$patch$forkSuffix"
         }
 
     companion object {
-        private val VERSION_REGEX = Regex("v?(\\d+)\\.(\\d+)\\.(\\d+)(-(\\d+)-g([a-zA-Z0-9]+))?")
+        private val VERSION_REGEX = Regex("v?(\\d+)\\.(\\d+)\\.(\\d+)(?:-([a-zA-Z][a-zA-Z0-9._-]*?))?(?:-(\\d+)-g([a-zA-Z0-9]+))?")
         val V0_26_0 = fromString("v0.26.0")
         val V0_26_2 = fromString("v0.26.2")
         val V0_27_0 = fromString("v0.27.0")
@@ -110,10 +115,10 @@ data class Version(
                 val major = m.groups[1]!!.value.toInt()
                 val minor = m.groups[2]!!.value.toInt()
                 val patch = m.groups[3]!!.value.toInt()
-                // group 4 is the optional commit info
+                val fork = m.groups[4]?.value
                 val numCommits = m.groups[5]?.value?.toInt()
                 val hash = m.groups[6]?.value
-                Version(major, minor, patch, numCommits, hash)
+                Version(major, minor, patch, fork, numCommits, hash)
             }
         }
 

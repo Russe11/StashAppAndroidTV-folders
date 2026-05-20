@@ -68,7 +68,7 @@ class UpdateChecker {
             Log.v(TAG, "Last successful update check was $timeSince ago")
             val installedVersion = getInstalledVersion(context)
             val latestRelease = getLatestRelease(context, updateUrl)
-            if (latestRelease != null && latestRelease.version.isGreaterThan(installedVersion)) {
+            if (latestRelease != null && latestRelease.version.isAppUpdateFor(installedVersion)) {
                 Log.v(TAG, "Update available $installedVersion => ${latestRelease.version}")
                 pref.edit {
                     putLong(context.getString(R.string.pref_key_update_last_check), now.time)

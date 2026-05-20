@@ -7,6 +7,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.github.damontecres.stashapp.StashApplication
+import com.github.damontecres.stashapp.folders.data.FolderListRow
 import com.github.damontecres.stashapp.folders.data.FolderNode
 import com.github.damontecres.stashapp.folders.data.FolderScene
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,15 +22,16 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * Holds the column-stack + selected-folder state for the Folders destination.
+ * Holds the "currently-visible folder" state for the Folders destination.
  *
- * The column stack is the breadcrumb of "currently focused folder" at each depth:
- * stack[0] is the root listing (parentPath = "/"), stack[1] = children of the folder
- * focused inside stack[0], and so on. The right-pane scene grid renders scenes
- * recursively under `selectedPath` (the deepest folder the user has activated).
+ * Per [docs/plans/stash-android-tv-folders-fork.md], the browser shows one folder
+ * at a time: the left pane lists that folder's immediate subfolders (with a `..`
+ * affordance pinned at the top when not at root); the right pane shows the
+ * scenes recursively under it. Selecting a subfolder *replaces* the pane (no
+ * column stack, no tree expansion); Back / `..` goes up one level.
  *
- * State is intentionally not persisted across process death; the UI is cheap enough
- * to rebuild from scratch on cold start.
+ * State is intentionally not persisted across process death; the UI is cheap
+ * enough to rebuild from scratch on cold start.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class FoldersViewModel : ViewModel() {
@@ -38,78 +40,60 @@ class FoldersViewModel : ViewModel() {
     private val _serverUrl = MutableStateFlow("")
 
     /**
-     * Stack of parent paths for each visible column. stack[0] is always the root.
-     * Stack length is always >= 1.
+     * The folder the user is currently viewing. Always canonical (trailing
+     * slash); `/` means the synthetic root. Selecting a subfolder sets this to
+     * that subfolder's path; `goUp()` walks one level back toward the root.
      */
-    private val _columnStack = MutableStateFlow(listOf(ROOT_PARENT))
-    val columnStack: StateFlow<List<String>> = _columnStack.asStateFlow()
-
-    /**
-     * The folder whose scenes are showing in the right pane. Null until the user
-     * activates a folder (D-pad center). Empty/blank means "show every scene under
-     * the server", but for v1 we leave the grid empty until something is picked.
-     */
-    private val _selectedPath = MutableStateFlow<String?>(null)
-    val selectedPath: StateFlow<String?> = _selectedPath.asStateFlow()
+    private val _currentPath = MutableStateFlow(ROOT_PARENT)
+    val currentPath: StateFlow<String> = _currentPath.asStateFlow()
 
     fun bindServer(serverUrl: String) {
         if (_serverUrl.value != serverUrl) {
             _serverUrl.value = serverUrl
             // New server: reset navigation so we don't carry over stale paths.
-            _columnStack.value = listOf(ROOT_PARENT)
-            _selectedPath.value = null
+            _currentPath.value = ROOT_PARENT
         }
     }
 
     /**
-     * Observe the list of children for a given column (by parent path).
-     *
-     * Must be reactive to [_serverUrl] — the first composition runs before
-     * [bindServer] fires from `LaunchedEffect`, so a one-shot snapshot would
-     * latch onto a blank server URL and never recover.
+     * Observe the immediate children of [parentPath]. Reactive to [_serverUrl]
+     * because the first composition runs before [bindServer] fires from a
+     * `LaunchedEffect`; a one-shot snapshot would latch onto a blank URL and
+     * never recover.
      */
-    fun observeColumn(parentPath: String): Flow<List<FolderNode>> =
+    fun observeChildren(parentPath: String): Flow<List<FolderListRow>> =
         _serverUrl
             .flatMapLatest { server ->
                 if (server.isBlank()) flowOf(emptyList()) else dao.observeChildren(server, parentPath)
             }.distinctUntilChanged()
 
-    /**
-     * Drill into [folder]: push a new column showing its children. No-op if the
-     * folder is already the parent of the rightmost column (the user pressed Right
-     * twice without moving focus).
-     */
-    fun pushColumn(folder: FolderNode) {
-        val current = _columnStack.value
-        if (current.lastOrNull() == folder.path) return
-        _columnStack.value = current + folder.path
+    /** Enter [folder]: the pane re-renders showing its children. */
+    fun enterFolder(folder: FolderNode) {
+        _currentPath.value = folder.path
     }
 
     /**
-     * Pop the rightmost column. No-op if only the root is left — the host shell
-     * handles "back from root" by navigating out of the destination entirely.
+     * Go up one level. Returns `true` if the path moved, `false` if we were
+     * already at the root — the caller (BackHandler / `..` row) can defer to
+     * the host shell to exit the destination in the latter case.
      */
-    fun popColumn(): Boolean {
-        val current = _columnStack.value
-        if (current.size <= 1) return false
-        _columnStack.value = current.dropLast(1)
+    fun goUp(): Boolean {
+        val current = _currentPath.value
+        val parent = parentOf(current)
+        if (parent == current) return false
+        _currentPath.value = parent
         return true
     }
 
-    /** Activate [folder]: scenes under this path now drive the right pane. */
-    fun selectFolder(folder: FolderNode) {
-        _selectedPath.value = folder.path
-    }
-
     /**
-     * Paged scenes recursively under [selectedPath]. Re-keyed by both the server
-     * URL and the path so flipping between folders restarts the page stream.
+     * Paged scenes recursively under the currently-viewed folder. Re-keyed by
+     * both the server URL and the path so navigating restarts the page stream.
      */
     val scenesFlow: Flow<PagingData<FolderScene>> =
         _serverUrl
             .flatMapLatest { server ->
-                _selectedPath.flatMapLatest { path ->
-                    if (server.isBlank() || path.isNullOrBlank()) {
+                _currentPath.flatMapLatest { path ->
+                    if (server.isBlank()) {
                         flowOf(PagingData.empty())
                     } else {
                         Pager(
@@ -126,10 +110,10 @@ class FoldersViewModel : ViewModel() {
             }.cachedIn(viewModelScope)
 
     /**
-     * Sync progress, kept hot so the top-bar chip reacts immediately. Reads from
-     * [com.github.damontecres.stashapp.folders.sync.LibraryIndexer]'s singleton when
-     * available; falls back to `Idle` while the indexer module isn't loaded so the
-     * UI still renders on cold-start.
+     * Sync progress, kept hot so the top-bar chip reacts immediately. Reads
+     * from [com.github.damontecres.stashapp.folders.sync.LibraryIndexer]'s
+     * singleton when available; falls back to `Idle` while the indexer module
+     * isn't loaded so the UI still renders on cold-start.
      */
     val syncProgress: StateFlow<SyncProgressUiState> =
         _serverUrl
@@ -148,5 +132,18 @@ class FoldersViewModel : ViewModel() {
     companion object {
         const val ROOT_PARENT = "/"
         private const val PAGE_SIZE = 60
+
+        /**
+         * Canonical parent of [path]. Paths look like `/Foo/Bar/` with leading
+         * and trailing slashes; the root is `/`. `parentOf("/") == "/"` so this
+         * is safe to call unconditionally — the caller checks for the fixed
+         * point to detect "already at root".
+         */
+        internal fun parentOf(path: String): String {
+            if (path.isEmpty() || path == ROOT_PARENT) return ROOT_PARENT
+            val trimmed = path.trimEnd('/')
+            val lastSlash = trimmed.lastIndexOf('/')
+            return if (lastSlash <= 0) ROOT_PARENT else trimmed.substring(0, lastSlash + 1)
+        }
     }
 }

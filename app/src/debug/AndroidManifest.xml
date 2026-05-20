@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only manifest fragment. Merged into the main manifest only for the
+  `debug` build variant. Adds a hidden activity for previewing the Folders
+  destination UX against mocked data — no Stash server required.
+
+  Launch via:
+    adb shell am start \
+      -n com.github.damontecres.stashapp.folders.debug/com.github.damontecres.stashapp.folders.ui.FoldersPreviewActivity
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="com.github.damontecres.stashapp.folders.ui.FoldersPreviewActivity"
+            android:exported="true"
+            android:label="Folders Preview"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout">
+            <!-- Not in the launcher; explicit-component-name launch only. -->
+        </activity>
+    </application>
+</manifest>

@@ -3,7 +3,12 @@ package com.github.damontecres.stashapp.ui.nav
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.preference.PreferenceManager
+import com.github.damontecres.stashapp.PreferenceScreenOption
+import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
@@ -22,6 +27,7 @@ import com.github.damontecres.stashapp.ui.pages.MainPage
 import com.github.damontecres.stashapp.ui.pages.MarkerPage
 import com.github.damontecres.stashapp.ui.pages.MarkerTimestampPage
 import com.github.damontecres.stashapp.ui.pages.PerformerPage
+import com.github.damontecres.stashapp.ui.pages.PinEntryPage
 import com.github.damontecres.stashapp.ui.pages.PlaybackPage
 import com.github.damontecres.stashapp.ui.pages.PlaylistPlaybackPage
 import com.github.damontecres.stashapp.ui.pages.SceneDetailsPage
@@ -53,7 +59,7 @@ fun DestinationContent(
 ) {
     when (destination) {
         is Destination.Pin -> {
-            throw UnsupportedOperationException("Destination.Pin")
+            unsupportedComposeDestination(destination)
         }
 
         //                    PinEntryPage(
@@ -71,7 +77,23 @@ fun DestinationContent(
 //                    )
 
         is Destination.SettingsPin -> {
-            throw UnsupportedOperationException("Destination.SettingsPin")
+            val context = LocalContext.current
+            val requiredPin =
+                PreferenceManager
+                    .getDefaultSharedPreferences(context)
+                    .getString(stringResource(R.string.pref_key_read_only_mode_pin), null)
+                    .orEmpty()
+            PinEntryPage(
+                requiredPin = requiredPin,
+                title = stringResource(R.string.enter_settings_pin),
+                onCorrectPin = {
+                    navManager.goBack()
+                    navManager.navigate(Destination.Settings(PreferenceScreenOption.BASIC))
+                },
+                preventBack = false,
+                uiConfig = composeUiConfig,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
 
         //                    PinEntryPage(
@@ -355,4 +377,13 @@ fun DestinationContent(
             FragmentView(navManager, destination, modifier)
         }
     }
+}
+
+internal fun isUnsupportedComposeDestination(destination: Destination): Boolean = destination is Destination.Pin
+
+private fun unsupportedComposeDestination(destination: Destination): Nothing {
+    check(isUnsupportedComposeDestination(destination)) {
+        "Destination is supported by Compose content: $destination"
+    }
+    throw UnsupportedOperationException(destination::class.simpleName)
 }

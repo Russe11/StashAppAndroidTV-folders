@@ -45,7 +45,7 @@
     <string name="folders_force_resync">Force resync</string>
     <string name="folders_empty">No folders yet — indexing in progress.</string>
 
-    <string name="app_update_url" translatable="false">https://api.github.com/repos/damontecres/StashAppAndroidTV/releases/latest</string>
+    <string name="app_update_url" translatable="false">https://api.github.com/repos/Russe11/StashAppAndroidTV-folders/releases/latest</string>
 
     <string name="setup_1_title">Server URL</string>
     <string name="setup_1_description">Configure the server URL</string>
