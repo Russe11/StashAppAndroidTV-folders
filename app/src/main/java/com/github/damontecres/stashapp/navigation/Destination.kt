@@ -52,6 +52,9 @@ sealed class Destination(
     data object Main : Destination()
 
     @Serializable
+    data object Folders : Destination()
+
+    @Serializable
     data class Settings(
         val screenOption: PreferenceScreenOption,
     ) : Destination(true, false)

@@ -18,6 +18,7 @@ import androidx.preference.PreferenceManager
 import androidx.room.Room
 import com.github.damontecres.stashapp.data.room.AppDatabase
 import com.github.damontecres.stashapp.data.room.MIGRATION_4_TO_5
+import com.github.damontecres.stashapp.folders.data.MIGRATION_5_TO_6
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.util.AppUpgradeHandler
 import com.github.damontecres.stashapp.util.QueryEngine
@@ -144,6 +145,14 @@ class StashApplication : Application() {
         }
 
         setupDB()
+        // Folders destination: install the indexer host so its UI bridge can
+        // observe sync progress and dispatch force-resync as soon as the user
+        // navigates to the Folders pane. Kicking off the actual delta sync is
+        // deferred until a server is picked (see `currentServer.observeForever`
+        // wiring below if/when needed).
+        com.github.damontecres.stashapp.folders.sync.LibraryIndexerHost.install(
+            daoProvider = { database.folderDao() },
+        )
     }
 
     override fun getResources(): Resources = Restring.wrapResources(applicationContext, super.getResources())
@@ -153,7 +162,7 @@ class StashApplication : Application() {
         database =
             Room
                 .databaseBuilder(this, AppDatabase::class.java, dbName)
-                .addMigrations(MIGRATION_4_TO_5)
+                .addMigrations(MIGRATION_4_TO_5, MIGRATION_5_TO_6)
                 .fallbackToDestructiveMigration()
                 .build()
     }

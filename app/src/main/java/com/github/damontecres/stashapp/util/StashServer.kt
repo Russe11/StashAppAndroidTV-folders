@@ -109,6 +109,7 @@ data class StashServer(
             }
             StashExoPlayer.releasePlayer()
             StashApplication.currentServer = server
+            com.github.damontecres.stashapp.folders.sync.LibraryIndexerHost.currentServerChanged(server)
         }
 
         fun removeStashServer(

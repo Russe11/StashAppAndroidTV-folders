@@ -29,6 +29,15 @@ sealed interface DrawerPage : Parcelable {
     }
 
     @Parcelize
+    data object FoldersPage : DrawerPage {
+        @IgnoredOnParcel
+        override val iconString = R.string.fa_folder_tree
+
+        @IgnoredOnParcel
+        override val name = R.string.folders
+    }
+
+    @Parcelize
     data object SettingPage : DrawerPage {
         // Unused
         @IgnoredOnParcel

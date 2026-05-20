@@ -237,6 +237,10 @@ class NavigationManagerLeanback(
                 Destination.ChooseTheme -> {
                     throw IllegalArgumentException("ChooseTheme not supported unless using Compose")
                 }
+
+                Destination.Folders -> {
+                    throw IllegalArgumentException("Folders not supported unless using Compose")
+                }
             }
 
         fragment.arguments = Bundle().putDestination(destination)

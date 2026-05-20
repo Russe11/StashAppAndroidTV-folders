@@ -118,6 +118,7 @@ fun ApplicationContent(
         buildList {
             add(DrawerPage.SearchPage)
             add(DrawerPage.HomePage)
+            add(DrawerPage.FoldersPage)
             addAll(
                 DataType.entries
                     .filter { server.serverPreferences.showMenuItem(it) }
@@ -173,6 +174,10 @@ fun ApplicationContent(
                         DrawerPage.SearchPage
                     }
 
+                    Destination.Folders -> {
+                        DrawerPage.FoldersPage
+                    }
+
                     Destination.SettingsPin,
                     is Destination.Settings,
                     -> {
@@ -221,6 +226,10 @@ fun ApplicationContent(
 
                             DrawerPage.SearchPage -> {
                                 Destination.Search
+                            }
+
+                            DrawerPage.FoldersPage -> {
+                                Destination.Folders
                             }
 
                             DrawerPage.SettingPage -> {
