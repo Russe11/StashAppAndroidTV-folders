@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -56,16 +55,33 @@ class FoldersViewModel : ViewModel() {
     }
 
     /**
-     * Observe the immediate children of [parentPath]. Reactive to [_serverUrl]
-     * because the first composition runs before [bindServer] fires from a
-     * `LaunchedEffect`; a one-shot snapshot would latch onto a blank URL and
-     * never recover.
+     * Paged immediate children for the left folder pane. Paging is used at every
+     * depth; thumbnail loading is still depth-gated by [showFolderThumbnailsForParentPath].
      */
-    fun observeChildren(parentPath: String): Flow<List<FolderListRow>> =
+    val childrenFlow: Flow<PagingData<FolderListRow>> =
         _serverUrl
             .flatMapLatest { server ->
-                if (server.isBlank()) flowOf(emptyList()) else dao.observeChildren(server, parentPath)
-            }.distinctUntilChanged()
+                _currentPath.flatMapLatest { path ->
+                    if (server.isBlank()) {
+                        flowOf(PagingData.empty())
+                    } else {
+                        Pager(
+                            config =
+                                PagingConfig(
+                                    pageSize = CHILD_PAGE_SIZE,
+                                    prefetchDistance = CHILD_PREFETCH_DISTANCE,
+                                    enablePlaceholders = true,
+                                ),
+                        ) {
+                            dao.pagingChildren(
+                                serverUrl = server,
+                                parentPath = path,
+                                includeThumbnails = showFolderThumbnailsForParentPath(path),
+                            )
+                        }.flow
+                    }
+                }
+            }.cachedIn(viewModelScope)
 
     /** Enter [folder]: the pane re-renders showing its children. */
     fun enterFolder(folder: FolderNode) {
@@ -132,6 +148,8 @@ class FoldersViewModel : ViewModel() {
     companion object {
         const val ROOT_PARENT = "/"
         private const val PAGE_SIZE = 60
+        private const val CHILD_PAGE_SIZE = 80
+        private const val CHILD_PREFETCH_DISTANCE = 20
 
         /**
          * Canonical parent of [path]. Paths look like `/Foo/Bar/` with leading
@@ -146,4 +164,11 @@ class FoldersViewModel : ViewModel() {
             return if (lastSlash <= 0) ROOT_PARENT else trimmed.substring(0, lastSlash + 1)
         }
     }
+}
+
+internal fun showFolderThumbnailsForParentPath(parentPath: String): Boolean = folderDepth(parentPath) >= 2
+
+private fun folderDepth(path: String): Int {
+    if (path.isBlank() || path == FoldersViewModel.ROOT_PARENT) return 0
+    return path.trim('/').split('/').count { it.isNotBlank() }
 }

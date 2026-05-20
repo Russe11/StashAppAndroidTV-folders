@@ -56,6 +56,8 @@ fun DestinationContent(
     onSwitchServer: (StashServer) -> Unit,
     modifier: Modifier = Modifier,
     onUpdateTitle: ((AnnotatedString) -> Unit)? = null,
+    onOpenNavigationDrawer: () -> Unit = {},
+    navigationDrawerOpen: Boolean = false,
 ) {
     when (destination) {
         is Destination.Pin -> {
@@ -233,6 +235,8 @@ fun DestinationContent(
                 longClicker = longClicker,
                 modifier = modifier,
                 onUpdateTitle = onUpdateTitle,
+                onOpenNavigationDrawer = onOpenNavigationDrawer,
+                navigationDrawerOpen = navigationDrawerOpen,
             )
         }
 

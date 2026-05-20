@@ -4,7 +4,6 @@ import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
-import kotlinx.coroutines.flow.Flow
 
 /**
  * Data-access for the Folders destination.
@@ -54,33 +53,28 @@ interface FolderDao {
     }
 
     /**
-     * Children of [parentPath] (canonical, with trailing slash), sorted by name
-     * case-insensitively so the Folders browser shows a stable order regardless of
-     * filesystem casing.
-     *
-     * Each row carries a `thumbnailUrl` chosen from a representative scene
-     * recursively under the folder: prefer organised scenes, then break ties by
-     * smallest numeric scene id so the pick is stable across launches. The
-     * correlated subquery fires once per folder shown (not per scroll), and uses
-     * the existing `folder_scenes(serverUrl, path)` composite index.
+     * Paged children for TV navigation. [includeThumbnails] deliberately gates the
+     * recursive representative-scene lookup so the top of very wide folder trees
+     * can stay cheap to browse.
      */
     @Query(
-        "SELECT f.*, (" +
+        "SELECT f.*, CASE WHEN :includeThumbnails THEN (" +
             "SELECT s.screenshotUrl FROM folder_scenes s " +
             "WHERE s.serverUrl = f.serverUrl " +
             "AND s.path LIKE f.path || '%' " +
             "AND s.screenshotUrl IS NOT NULL " +
             "ORDER BY s.organized DESC, CAST(s.sceneId AS INTEGER) ASC " +
             "LIMIT 1" +
-            ") AS thumbnailUrl " +
+            ") ELSE NULL END AS thumbnailUrl " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.parentPath = :parentPath " +
             "ORDER BY f.name COLLATE NOCASE ASC",
     )
-    fun observeChildren(
+    fun pagingChildren(
         serverUrl: String,
         parentPath: String,
-    ): Flow<List<FolderListRow>>
+        includeThumbnails: Boolean,
+    ): PagingSource<Int, FolderListRow>
 
     /**
      * Scenes anywhere under [pathPrefix] (canonical, trailing slash). Pass the path

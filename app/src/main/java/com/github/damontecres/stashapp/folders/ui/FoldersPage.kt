@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.folders.ui
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -18,7 +19,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -41,7 +41,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.data.DataType
-import com.github.damontecres.stashapp.folders.data.FolderListRow
 import com.github.damontecres.stashapp.folders.data.FolderScene
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
@@ -81,6 +80,8 @@ fun FoldersPage(
     longClicker: LongClicker<Any>,
     modifier: Modifier = Modifier,
     onUpdateTitle: ((AnnotatedString) -> Unit)? = null,
+    onOpenNavigationDrawer: () -> Unit = {},
+    navigationDrawerOpen: Boolean = false,
     viewModel: FoldersViewModel = viewModel(),
 ) {
     val title = stringResource(R.string.folders)
@@ -95,31 +96,26 @@ fun FoldersPage(
     val currentPath by viewModel.currentPath.collectAsState()
     val syncProgress by viewModel.syncProgress.collectAsState()
     val pagingItems = viewModel.scenesFlow.collectAsLazyPagingItems()
+    val childItems = viewModel.childrenFlow.collectAsLazyPagingItems()
 
     val coroutineScope = rememberCoroutineScope()
-
-    val childrenSnapshot: FolderChildrenSnapshot? by produceState<FolderChildrenSnapshot?>(
-        initialValue = null,
-        currentPath,
-    ) {
-        value = null
-        viewModel.observeChildren(currentPath).collect { value = FolderChildrenSnapshot(currentPath, it) }
-    }
-    val childList =
-        visibleChildrenForPath(
-            currentPath = currentPath,
-            snapshotPath = childrenSnapshot?.path,
-            children = childrenSnapshot?.children,
-        )
     val showParent = currentPath != FoldersViewModel.ROOT_PARENT
-    val rowCount = folderRowCount(showParent, childList)
+    val rowCount = folderRowCount(showParent, childItems.itemCount)
 
-    var focusedRowIndex by rememberSaveable(currentPath) { mutableIntStateOf(0) }
+    val focusByPath = remember { mutableMapOf<String, Int>() }
+    var focusedRowIndex by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(currentPath) {
+        focusedRowIndex = focusByPath.restoreFolderFocus(currentPath)
+    }
+    LaunchedEffect(currentPath, focusedRowIndex) {
+        focusByPath.rememberFolderFocus(currentPath, focusedRowIndex)
+    }
     LaunchedEffect(rowCount) {
         if (focusedRowIndex >= rowCount) {
             focusedRowIndex = (rowCount - 1).coerceAtLeast(0)
         }
     }
+    var visibleFolderRows by rememberSaveable { mutableIntStateOf(8) }
 
     // Which pane currently owns input focus. Left = the host-driven subfolder
     // list (see FolderListPane); Right = the scene grid (Compose-focus-managed
@@ -127,18 +123,10 @@ fun FoldersPage(
     // Right; hardware Back / DPAD_LEFT from the right pane returns to Left.
     var paneFocus by remember { mutableStateOf(PaneFocus.Left) }
 
-    // Hardware Back: in the Right pane it returns to Left (so the user can
-    // keep browsing folders); in the Left pane it goes up one folder, and at
-    // root the handler is disabled so the host nav controller pops the
-    // destination as usual.
-    BackHandler(
-        enabled = paneFocus == PaneFocus.Right || currentPath != FoldersViewModel.ROOT_PARENT,
-    ) {
-        if (paneFocus == PaneFocus.Right) {
-            paneFocus = PaneFocus.Left
-        } else {
-            viewModel.goUp()
-        }
+    // Hardware Back is a shell/menu action for Folders. Left handles spatial
+    // navigation inside the page: videos -> folders -> parent/root menu.
+    BackHandler(enabled = !navigationDrawerOpen) {
+        onOpenNavigationDrawer()
     }
 
     val onSceneClick: (FolderScene) -> Unit = { scene ->
@@ -154,6 +142,26 @@ fun FoldersPage(
     LaunchedEffect(paneFocus) {
         if (paneFocus == PaneFocus.Left) {
             runCatching { rootFocus.requestFocus() }
+        }
+    }
+
+    val goUpOrOpenDrawer = {
+        if (!viewModel.goUp()) {
+            onOpenNavigationDrawer()
+        }
+    }
+
+    val activateFolderRow = {
+        when {
+            showParent && focusedRowIndex == 0 -> goUpOrOpenDrawer()
+            else -> {
+                val childIndex = focusedRowIndex - (if (showParent) 1 else 0)
+                if (childIndex >= 0) {
+                    childItems[childIndex]?.let { row ->
+                        viewModel.enterFolder(row.node)
+                    }
+                }
+            }
         }
     }
 
@@ -180,6 +188,26 @@ fun FoldersPage(
                             else -> false
                         }
                     }
+                    if (event.isPageUpKey()) {
+                        focusedRowIndex =
+                            folderPageJumpIndex(
+                                currentIndex = focusedRowIndex,
+                                rowCount = rowCount,
+                                visibleRowCount = visibleFolderRows,
+                                direction = -1,
+                            )
+                        return@onPreviewKeyEvent true
+                    }
+                    if (event.isPageDownKey()) {
+                        focusedRowIndex =
+                            folderPageJumpIndex(
+                                currentIndex = focusedRowIndex,
+                                rowCount = rowCount,
+                                visibleRowCount = visibleFolderRows,
+                                direction = 1,
+                            )
+                        return@onPreviewKeyEvent true
+                    }
                     when (event.key) {
                         Key.DirectionUp -> {
                             if (focusedRowIndex > 0) focusedRowIndex--
@@ -192,7 +220,7 @@ fun FoldersPage(
                         }
 
                         Key.DirectionLeft -> {
-                            viewModel.goUp()
+                            goUpOrOpenDrawer()
                             true
                         }
 
@@ -209,13 +237,7 @@ fun FoldersPage(
                         }
 
                         Key.DirectionCenter, Key.Enter -> {
-                            when (val target =
-                                folderRowTargetAt(showParent, focusedRowIndex, childList)) {
-                                FolderRowTarget.GoUp -> viewModel.goUp()
-                                is FolderRowTarget.Enter -> viewModel.enterFolder(target.node)
-                                null -> { /* nothing to do */
-                                }
-                            }
+                            activateFolderRow()
                             true
                         }
 
@@ -247,8 +269,9 @@ fun FoldersPage(
             ) {
                 FolderListPane(
                     currentPath = currentPath,
-                    children = childList,
+                    children = childItems,
                     focusedRowIndex = focusedRowIndex,
+                    onVisibleRowCountChange = { visibleFolderRows = it },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -283,22 +306,6 @@ fun FoldersPage(
  * Back / DPAD_LEFT correctly depending on which pane is active.
  */
 private enum class PaneFocus { Left, Right }
-
-private data class FolderChildrenSnapshot(
-    val path: String,
-    val children: List<FolderListRow>,
-)
-
-internal fun visibleChildrenForPath(
-    currentPath: String,
-    snapshotPath: String?,
-    children: List<FolderListRow>?,
-): List<FolderListRow>? =
-    if (snapshotPath == currentPath) {
-        children
-    } else {
-        null
-    }
 
 @Composable
 private fun FoldersTopBar(
@@ -342,3 +349,11 @@ private fun FoldersTopBar(
         }
     }
 }
+
+private fun androidx.compose.ui.input.key.KeyEvent.isPageUpKey(): Boolean =
+    nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_PAGE_UP ||
+        nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_CHANNEL_UP
+
+private fun androidx.compose.ui.input.key.KeyEvent.isPageDownKey(): Boolean =
+    nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_PAGE_DOWN ||
+        nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_CHANNEL_DOWN

@@ -32,16 +32,29 @@ class FolderListPaneTest {
     }
 
     @Test
-    fun visibleChildrenForPath_hidesStaleRowsFromPreviousFolder() {
-        val oldFolderRows = listOf(folderListRow(path = "/Source/Heavy/", name = "Heavy"))
+    fun showFolderThumbnailsForParentPath_suppressesTopTwoFolderLevels() {
+        assertEquals(false, showFolderThumbnailsForParentPath("/"))
+        assertEquals(false, showFolderThumbnailsForParentPath("/Studios/"))
+        assertEquals(true, showFolderThumbnailsForParentPath("/Studios/Network/"))
+    }
 
-        assertNull(
-            visibleChildrenForPath(
-                currentPath = "/Source/Heavy/",
-                snapshotPath = "/Source/",
-                children = oldFolderRows,
-            ),
-        )
+    @Test
+    fun rememberedFocusForPath_restoresParentFolderRowAfterReturningFromChild() {
+        val focusByPath = mutableMapOf<String, Int>()
+
+        focusByPath.rememberFolderFocus("/", 23)
+        focusByPath.rememberFolderFocus("/Studios/", 4)
+
+        assertEquals(23, focusByPath.restoreFolderFocus("/"))
+        assertEquals(4, focusByPath.restoreFolderFocus("/Studios/"))
+        assertEquals(0, focusByPath.restoreFolderFocus("/Missing/"))
+    }
+
+    @Test
+    fun folderPageJumpIndex_movesByVisibleRowCountAndClampsToBounds() {
+        assertEquals(17, folderPageJumpIndex(currentIndex = 5, rowCount = 100, visibleRowCount = 12, direction = 1))
+        assertEquals(0, folderPageJumpIndex(currentIndex = 5, rowCount = 100, visibleRowCount = 12, direction = -1))
+        assertEquals(99, folderPageJumpIndex(currentIndex = 95, rowCount = 100, visibleRowCount = 12, direction = 1))
     }
 
     private fun folderListRow(

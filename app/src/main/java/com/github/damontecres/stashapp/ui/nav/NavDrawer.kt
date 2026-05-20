@@ -83,9 +83,13 @@ fun NavDrawer(
     }
 
     val drawerFocusRequester = remember { FocusRequester() }
-    BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination == Destination.Main)) {
+    val openDrawer: () -> Unit = {
         drawerState.setValue(DrawerValue.Open)
         drawerFocusRequester.requestFocus()
+        initialFocus.tryRequestFocus()
+    }
+    BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination == Destination.Main)) {
+        openDrawer()
     }
 
     val serverUrlInteractionSource = remember { MutableInteractionSource() }
@@ -211,6 +215,8 @@ fun NavDrawer(
                 longClicker = longClicker,
                 onChangeTheme = onChangeTheme,
                 onSwitchServer = onSwitchServer,
+                onOpenNavigationDrawer = openDrawer,
+                navigationDrawerOpen = drawerState.currentValue == DrawerValue.Open,
                 modifier =
                     Modifier
                         .fillMaxSize()

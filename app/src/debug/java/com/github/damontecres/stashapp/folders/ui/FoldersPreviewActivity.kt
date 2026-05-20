@@ -34,11 +34,14 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.github.damontecres.stashapp.folders.data.FolderListRow
 import com.github.damontecres.stashapp.folders.data.FolderNode
 import com.github.damontecres.stashapp.ui.AppTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 /**
@@ -73,6 +76,7 @@ private fun FoldersPreviewScreen() {
     val tree = remember { MockFolderTree() }
     val currentPath by tree.currentPath.collectAsState()
     val childList by tree.childrenOf(currentPath).collectAsState(initial = emptyList())
+    val childPagingItems = remember(childList) { flowOf(PagingData.from(childList)) }.collectAsLazyPagingItems()
     val showParent = currentPath != ROOT
     val rowCount = (if (showParent) 1 else 0) + childList.size
 
@@ -172,7 +176,7 @@ private fun FoldersPreviewScreen() {
                 ) {
                     FolderListPane(
                         currentPath = currentPath,
-                        children = childList,
+                        children = childPagingItems,
                         focusedRowIndex = focusedRowIndex,
                         modifier = Modifier.fillMaxSize(),
                     )

@@ -14,11 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -61,19 +65,28 @@ import com.github.damontecres.stashapp.ui.components.CircularProgress
 @Composable
 fun FolderListPane(
     currentPath: String,
-    children: List<FolderListRow>?,
+    children: LazyPagingItems<FolderListRow>,
     focusedRowIndex: Int,
     modifier: Modifier = Modifier,
+    onVisibleRowCountChange: (Int) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val showParent = currentPath != ROOT_PATH
-    val rowCount = folderRowCount(showParent, children)
+    val rowCount = folderRowCount(showParent, children.itemCount)
 
     // Keep the focused row in view as the user navigates with the D-pad.
     LaunchedEffect(focusedRowIndex, rowCount) {
         if (focusedRowIndex in 0 until rowCount) {
             runCatching { listState.animateScrollToItem(focusedRowIndex) }
         }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.size }
+            .collect { visibleRows ->
+                if (visibleRows > 0) {
+                    onVisibleRowCountChange(visibleRows)
+                }
+            }
     }
 
     Column(
@@ -87,7 +100,7 @@ fun FolderListPane(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        if (children == null) {
+        if (children.loadState.refresh is LoadState.Loading && rowCount == 0) {
             CircularProgress()
             return@Column
         }
@@ -120,12 +133,20 @@ fun FolderListPane(
                     ParentRow(isSelected = focusedRowIndex == 0)
                 }
             }
-            itemsIndexed(items = children, key = { _, row -> row.node.path }) { i, row ->
+            items(
+                count = children.itemCount,
+                key = children.itemKey { it.node.path },
+            ) { i ->
                 val rowIndex = (if (showParent) 1 else 0) + i
-                FolderRow(
-                    row = row,
-                    isSelected = focusedRowIndex == rowIndex,
-                )
+                val row = children[i]
+                if (row == null) {
+                    FolderPlaceholderRow(isSelected = focusedRowIndex == rowIndex)
+                } else {
+                    FolderRow(
+                        row = row,
+                        isSelected = focusedRowIndex == rowIndex,
+                    )
+                }
             }
         }
     }
@@ -159,7 +180,33 @@ fun folderRowCount(
     children: List<FolderListRow>?,
 ): Int {
     if (children == null) return 0
-    return (if (showParent) 1 else 0) + children.size
+    return folderRowCount(showParent, children.size)
+}
+
+fun folderRowCount(
+    showParent: Boolean,
+    childCount: Int,
+): Int = (if (showParent) 1 else 0) + childCount.coerceAtLeast(0)
+
+internal fun MutableMap<String, Int>.rememberFolderFocus(
+    path: String,
+    focusedRowIndex: Int,
+) {
+    this[path] = focusedRowIndex.coerceAtLeast(0)
+}
+
+internal fun Map<String, Int>.restoreFolderFocus(path: String): Int = this[path]?.coerceAtLeast(0) ?: 0
+
+internal fun folderPageJumpIndex(
+    currentIndex: Int,
+    rowCount: Int,
+    visibleRowCount: Int,
+    direction: Int,
+): Int {
+    if (rowCount <= 0) return 0
+    val step = visibleRowCount.coerceAtLeast(1)
+    val target = currentIndex + (step * direction.coerceIn(-1, 1))
+    return target.coerceIn(0, rowCount - 1)
 }
 
 @Composable
@@ -254,6 +301,28 @@ private fun FolderRow(
                 color = textColor.copy(alpha = 0.7f),
             )
         }
+    }
+}
+
+@Composable
+private fun FolderPlaceholderRow(
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor =
+        if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(containerColor)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = "",
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
