@@ -71,7 +71,7 @@ configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "com.github.damontecres.stashapp"
+        applicationId = "com.github.damontecres.stashapp.folders"
         minSdk = 23
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -282,7 +282,12 @@ dependencies {
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.paging)
     ksp(libs.androidx.room.compiler)
+    // Paging is consumed by the Folders destination's DAO (PagingSource<Int, FolderScene>)
+    // and by the Compose-side LazyPagingItems collector in the Folders browser.
+    implementation(libs.androidx.paging.runtime.ktx)
+    implementation(libs.androidx.paging.compose)
 
     implementation(libs.androidx.compose.runtime)
     implementation(platform(libs.androidx.compose.bom))

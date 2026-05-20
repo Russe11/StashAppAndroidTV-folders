@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">StashAppAndroidTV</string>
+    <string name="app_name" translatable="false">Stash TV (Folders)</string>
     <string name="browse_title" translatable="false">Stash</string>
     <string name="play_scene" translatable="false">Play</string>
     <string name="pref_stash_server_header" translatable="false">Stash</string>
@@ -30,6 +30,7 @@
     <string name="fa_angle_down" translatable="false">&#xf107;</string>
     <string name="fa_angles_down" translatable="false">&#xf103;</string>
     <string name="fa_house" translatable="false">&#xf015;</string>
+    <string name="fa_folder_tree" translatable="false">&#xf802;</string>
     <string name="fa_closed_captioning" translatable="false">&#xf20a;</string>
     <string name="fa_thumbs_up" translatable="false">&#xf164;</string>
 
@@ -39,12 +40,16 @@
     <string name="failed_update">Failed to update</string>
     <string name="advanced_settings">Advanced Settings</string>
     <string name="home">Home</string>
+    <string name="folders">Folders</string>
+    <string name="folders_indexing">Indexing %1$d / %2$d scenes…</string>
+    <string name="folders_force_resync">Force resync</string>
+    <string name="folders_empty">No folders yet — indexing in progress.</string>
 
     <string name="app_update_url" translatable="false">https://api.github.com/repos/damontecres/StashAppAndroidTV/releases/latest</string>
 
     <string name="setup_1_title">Server URL</string>
     <string name="setup_1_description">Configure the server URL</string>
-    <string name="app_name_long">Stash for Android TV</string>
+    <string name="app_name_long">Stash for Android TV (Folders)</string>
     <string name="first_time_setup">First time setup</string>
     <string name="stash_server_url">Stash Server URL</string>
     <string name="stash_server_url_desc">Enter the URL for your Stash server, including the port if needed</string>
