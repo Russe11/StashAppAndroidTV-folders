@@ -54,18 +54,12 @@ interface FolderDao {
 
     /**
      * Paged children for TV navigation. [includeThumbnails] deliberately gates the
-     * recursive representative-scene lookup so the top of very wide folder trees
-     * can stay cheap to browse.
+     * materialised thumbnail column so the top of very wide folder trees can skip
+     * image loading without paying any recursive scene lookup cost while browsing.
      */
     @Query(
-        "SELECT f.*, CASE WHEN :includeThumbnails THEN (" +
-            "SELECT s.screenshotUrl FROM folder_scenes s " +
-            "WHERE s.serverUrl = f.serverUrl " +
-            "AND s.path LIKE f.path || '%' " +
-            "AND s.screenshotUrl IS NOT NULL " +
-            "ORDER BY s.organized DESC, CAST(s.sceneId AS INTEGER) ASC " +
-            "LIMIT 1" +
-            ") ELSE NULL END AS thumbnailUrl " +
+        "SELECT f.serverUrl, f.path, f.name, f.parentPath, f.recursiveCount, f.directCount, " +
+            "CASE WHEN :includeThumbnails THEN f.thumbnailUrl ELSE NULL END AS thumbnailUrl " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.parentPath = :parentPath " +
             "ORDER BY f.name COLLATE NOCASE ASC",
@@ -108,14 +102,6 @@ interface FolderDao {
     @Query("SELECT COUNT(*) FROM folder_scenes WHERE serverUrl = :serverUrl")
     suspend fun countScenes(serverUrl: String): Int
 
-    /**
-     * Every scene's `parentPath` for a server, as a flat list (one entry per scene; a
-     * folder with N scenes appears N times). Used by [com.github.damontecres.stashapp.folders.sync.LibraryIndexer]
-     * after a scan to recompute folder counts in a single pass.
-     *
-     * Scoped by `serverUrl` so a multi-server cache stays isolated. Returns the raw column
-     * — callers are responsible for any deduplication/aggregation.
-     */
-    @Query("SELECT parentPath FROM folder_scenes WHERE serverUrl = :serverUrl")
-    suspend fun allParentPathsForServer(serverUrl: String): List<String>
+    @Query("SELECT * FROM folder_scenes WHERE serverUrl = :serverUrl ORDER BY path COLLATE NOCASE ASC")
+    suspend fun allScenesForServer(serverUrl: String): List<FolderScene>
 }

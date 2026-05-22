@@ -16,6 +16,8 @@ import androidx.room.Index
  *
  * `recursiveCount` counts scenes anywhere under this folder; `directCount` counts only
  * scenes whose `parentPath` exactly equals this `path`.
+ * `thumbnailUrl` is materialised during sync so browsing a folder does not need to
+ * run one recursive scene lookup per visible child row.
  */
 @Entity(
     tableName = "folders",
@@ -38,4 +40,5 @@ data class FolderNode(
     val parentPath: String,
     val recursiveCount: Int,
     val directCount: Int,
+    val thumbnailUrl: String?,
 )

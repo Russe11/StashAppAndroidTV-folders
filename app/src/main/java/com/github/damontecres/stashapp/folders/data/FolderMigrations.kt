@@ -107,3 +107,18 @@ val MIGRATION_6_TO_7 =
             )
         }
     }
+
+/**
+ * Adds a materialised representative thumbnail URL to `folders`.
+ *
+ * Before v8, the left-pane child query ran a correlated recursive lookup against
+ * `folder_scenes` for every visible folder row. That made deep folder browsing
+ * depend on repeated scene-table scans. The sync rebuild now computes the
+ * representative thumbnail once and stores it on the folder row.
+ */
+val MIGRATION_7_TO_8 =
+    object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `folders` ADD COLUMN `thumbnailUrl` TEXT")
+        }
+    }

@@ -138,7 +138,7 @@ private fun FolderSceneStillImage(
             remember(scene.screenshotUrl) {
                 ImageRequest.Builder(context)
                     .data(scene.screenshotUrl)
-                    .crossfade(true)
+                    .crossfade(false)
                     .precision(Precision.INEXACT)
                     .build()
             }

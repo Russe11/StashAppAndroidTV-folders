@@ -10,11 +10,11 @@ import com.github.damontecres.stashapp.folders.data.FolderSyncState
 
 // Schema v6 adds the Folders destination tables (folder_scenes, folders,
 // folder_sync_state) via MIGRATION_5_TO_6. v7 adds two composite indexes
-// (folder_scenes.serverUrl+path, folders.serverUrl+name) via MIGRATION_6_TO_7
-// to speed up the recursive-scene query and the left-pane subfolder ordering.
-// StashApplication is responsible for wiring those migrations into the
-// database builder; if a device skips one, fallbackToDestructiveMigration() is
-// already configured app-side as a safety net.
+// (folder_scenes.serverUrl+path, folders.serverUrl+name). v8 adds
+// folders.thumbnailUrl so the child-folder query no longer runs a correlated
+// scene lookup per folder row. StashApplication wires those migrations into
+// the database builder; fallbackToDestructiveMigration() remains app-side as a
+// safety net.
 @Database(
     entities = [
         RecentSearchItem::class,
@@ -23,7 +23,7 @@ import com.github.damontecres.stashapp.folders.data.FolderSyncState
         FolderNode::class,
         FolderSyncState::class,
     ],
-    version = 7,
+    version = 8,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

@@ -71,7 +71,7 @@ class FolderListPaneTest {
                     parentPath = "/",
                     recursiveCount = 1,
                     directCount = 0,
+                    thumbnailUrl = thumbnailUrl,
                 ),
-            thumbnailUrl = thumbnailUrl,
         )
 }

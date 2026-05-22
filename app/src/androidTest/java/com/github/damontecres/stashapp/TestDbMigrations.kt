@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.data.room.AppDatabase
 import com.github.damontecres.stashapp.data.room.MIGRATION_4_TO_5
+import com.github.damontecres.stashapp.folders.data.MIGRATION_7_TO_8
 import org.junit.Assert
 import org.junit.Rule
 import org.junit.Test
@@ -59,6 +60,32 @@ class TestDbMigrations {
             Assert.assertEquals(DataType.SCENE.ordinal, c.getInt(0))
             Assert.assertEquals(itemId, c.getString(1))
             Assert.assertEquals(blurValue, c.getInt(2))
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate7To8_addsFolderThumbnailUrl() {
+        helper.createDatabase(testDbName, 7).apply {
+            execSQL(
+                "INSERT INTO folders VALUES (?, ?, ?, ?, ?, ?)",
+                arrayOf<Any>(
+                    "https://server",
+                    "/Movies/",
+                    "Movies",
+                    "/",
+                    2,
+                    0,
+                ),
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(testDbName, 8, true, MIGRATION_7_TO_8)
+
+        db.query("SELECT thumbnailUrl FROM folders WHERE serverUrl = ? AND path = ?", arrayOf("https://server", "/Movies/")).useCursor { c ->
+            c.moveToFirst()
+            Assert.assertTrue(c.isNull(0))
         }
     }
 }

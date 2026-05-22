@@ -338,7 +338,7 @@ private fun FolderRowThumbnail(
             remember(row.thumbnailUrl) {
                 ImageRequest.Builder(context)
                     .data(row.thumbnailUrl)
-                    .crossfade(true)
+                    .crossfade(false)
                     .precision(Precision.INEXACT)
                     .build()
             }

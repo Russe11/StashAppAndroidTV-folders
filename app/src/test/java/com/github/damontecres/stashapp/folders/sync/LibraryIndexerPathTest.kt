@@ -1,6 +1,8 @@
 package com.github.damontecres.stashapp.folders.sync
 
+import com.github.damontecres.stashapp.folders.data.FolderScene
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -75,4 +77,47 @@ class LibraryIndexerPathTest {
         assertEquals("docs", LibraryIndexer.folderName("/prv/docs/"))
         assertEquals("", LibraryIndexer.folderName("/"))
     }
+
+    @Test
+    fun representativeThumbnail_prefersOrganizedSceneThenLowestNumericId() {
+        val rows =
+            listOf(
+                folderScene(sceneId = "20", path = "/root/a/scene20.mp4", organized = false, screenshotUrl = "u20"),
+                folderScene(sceneId = "7", path = "/root/a/scene7.mp4", organized = true, screenshotUrl = "u7"),
+                folderScene(sceneId = "3", path = "/root/a/nested/scene3.mp4", organized = true, screenshotUrl = "u3"),
+            )
+
+        assertEquals("u3", LibraryIndexer.representativeThumbnailFor("/root/a/", rows))
+    }
+
+    @Test
+    fun representativeThumbnail_ignoresScenesOutsideFolderAndBlankScreenshots() {
+        val rows =
+            listOf(
+                folderScene(sceneId = "1", path = "/root/abc/scene1.mp4", organized = true, screenshotUrl = "outside"),
+                folderScene(sceneId = "2", path = "/root/a/scene2.mp4", organized = true, screenshotUrl = ""),
+                folderScene(sceneId = "3", path = "/root/a/scene3.mp4", organized = false, screenshotUrl = null),
+            )
+
+        assertNull(LibraryIndexer.representativeThumbnailFor("/root/a/", rows))
+    }
+
+    private fun folderScene(
+        sceneId: String,
+        path: String,
+        organized: Boolean,
+        screenshotUrl: String?,
+    ) = FolderScene(
+        serverUrl = "https://stash.example.test",
+        sceneId = sceneId,
+        path = path,
+        parentPath = LibraryIndexer.parentPathOf(path),
+        title = null,
+        durationSeconds = null,
+        rating100 = null,
+        organized = organized,
+        screenshotUrl = screenshotUrl,
+        previewUrl = null,
+        updatedAtEpochMs = sceneId.toLong(),
+    )
 }

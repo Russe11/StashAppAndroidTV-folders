@@ -334,20 +334,27 @@ class LibraryIndexer(
     private suspend fun rebuildAllFolderCounts() {
         val directCounts = HashMap<String, Int>()
         val recursiveCounts = HashMap<String, Int>()
+        val thumbnailCandidates = HashMap<String, ThumbnailCandidate>()
 
-        // Read every parentPath out of Room in one query. For very large libraries (~64k
-        // scenes in our reference test) this is ~64k short strings, well within the
-        // memory budget the rest of the app already assumes (StashPagingSource holds
-        // pages of SlimSceneData which is much larger per row). The folder map grows as
-        // O(unique folders), not O(scenes), so the aggregate stays bounded.
-        val allParentPaths = collectParentPaths()
+        // Read every cached scene once, then aggregate counts and thumbnail candidates
+        // in memory. This moves the expensive recursive thumbnail lookup out of the
+        // folder-browsing query path and into the background sync path.
+        val allScenes = collectScenes()
 
-        for (parent in allParentPaths) {
+        for (scene in allScenes) {
+            val parent = scene.parentPath
             directCounts.merge(parent, 1) { a, b -> a + b }
             // Walk ancestors. parent always ends in "/". Root is "/".
             var ancestor = parent
+            val candidate = ThumbnailCandidate.from(scene)
             while (true) {
                 recursiveCounts.merge(ancestor, 1) { a, b -> a + b }
+                if (candidate != null) {
+                    val current = thumbnailCandidates[ancestor]
+                    if (current == null || candidate.isBetterThan(current)) {
+                        thumbnailCandidates[ancestor] = candidate
+                    }
+                }
                 if (ancestor == "/") break
                 ancestor = parentFolderOf(ancestor)
             }
@@ -374,6 +381,7 @@ class LibraryIndexer(
                     parentPath = if (path == "/") "" else parentFolderOf(path),
                     recursiveCount = recursiveCounts[path] ?: 0,
                     directCount = directCounts[path] ?: 0,
+                    thumbnailUrl = thumbnailCandidates[path]?.url,
                 )
             }
         // Drop the old folder rows for this server before upserting fresh ones so
@@ -388,12 +396,7 @@ class LibraryIndexer(
         }
     }
 
-    /**
-     * Read every scene's parentPath for this server back out of Room so we can rebuild
-     * folder counts in one pass. Backed by [FolderDao.allParentPathsForServer], which is
-     * indexed on `serverUrl` so the read is cheap.
-     */
-    private suspend fun collectParentPaths(): List<String> = dao.allParentPathsForServer(server.url)
+    private suspend fun collectScenes(): List<FolderScene> = dao.allScenesForServer(server.url)
 
     // -- Path helpers ---------------------------------------------------------------------
     //
@@ -506,6 +509,45 @@ class LibraryIndexer(
             val trimmed = folderPath.trimEnd('/')
             val lastSlash = trimmed.lastIndexOf('/')
             return if (lastSlash < 0) trimmed else trimmed.substring(lastSlash + 1)
+        }
+
+        internal fun representativeThumbnailFor(
+            folderPath: String,
+            scenes: List<FolderScene>,
+        ): String? {
+            var best: ThumbnailCandidate? = null
+            for (scene in scenes) {
+                if (!scene.path.startsWith(folderPath)) continue
+                val candidate = ThumbnailCandidate.from(scene) ?: continue
+                if (best == null || candidate.isBetterThan(best)) {
+                    best = candidate
+                }
+            }
+            return best?.url
+        }
+    }
+
+    private data class ThumbnailCandidate(
+        val url: String,
+        val organized: Boolean,
+        val numericSceneId: Long,
+    ) {
+        fun isBetterThan(other: ThumbnailCandidate): Boolean =
+            when {
+                organized != other.organized -> organized
+                numericSceneId != other.numericSceneId -> numericSceneId < other.numericSceneId
+                else -> false
+            }
+
+        companion object {
+            fun from(scene: FolderScene): ThumbnailCandidate? {
+                val url = scene.screenshotUrl?.takeIf { it.isNotBlank() } ?: return null
+                return ThumbnailCandidate(
+                    url = url,
+                    organized = scene.organized,
+                    numericSceneId = scene.sceneId.toLongOrNull() ?: 0L,
+                )
+            }
         }
     }
 }
