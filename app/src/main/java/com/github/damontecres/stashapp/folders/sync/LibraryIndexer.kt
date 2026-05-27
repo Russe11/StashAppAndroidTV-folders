@@ -335,6 +335,7 @@ class LibraryIndexer(
         val directCounts = HashMap<String, Int>()
         val recursiveCounts = HashMap<String, Int>()
         val thumbnailCandidates = HashMap<String, ThumbnailCandidate>()
+        val directSummaries = HashMap<String, DirectFolderSummary>()
 
         // Read every cached scene once, then aggregate counts and thumbnail candidates
         // in memory. This moves the expensive recursive thumbnail lookup out of the
@@ -344,6 +345,11 @@ class LibraryIndexer(
         for (scene in allScenes) {
             val parent = scene.parentPath
             directCounts.merge(parent, 1) { a, b -> a + b }
+            val currentDirectSummary = directSummaries[parent]
+            val candidateDirectSummary = DirectFolderSummary.from(scene)
+            if (currentDirectSummary == null || candidateDirectSummary.isBetterThan(currentDirectSummary)) {
+                directSummaries[parent] = candidateDirectSummary
+            }
             // Walk ancestors. parent always ends in "/". Root is "/".
             var ancestor = parent
             val candidate = ThumbnailCandidate.from(scene)
@@ -382,6 +388,8 @@ class LibraryIndexer(
                     recursiveCount = recursiveCounts[path] ?: 0,
                     directCount = directCounts[path] ?: 0,
                     thumbnailUrl = thumbnailCandidates[path]?.url,
+                    newestDirectUpdatedAtEpochMs = directSummaries[path]?.newestUpdatedAtEpochMs ?: 0,
+                    newestDirectThumbnailUrl = directSummaries[path]?.thumbnailUrl,
                 )
             }
         // Drop the old folder rows for this server before upserting fresh ones so
@@ -524,6 +532,38 @@ class LibraryIndexer(
                 }
             }
             return best?.url
+        }
+
+        internal fun directFolderSummaryFor(
+            folderPath: String,
+            scenes: List<FolderScene>,
+        ): DirectFolderSummary {
+            var best = DirectFolderSummary()
+            for (scene in scenes) {
+                if (scene.parentPath != folderPath) continue
+                val candidate = DirectFolderSummary.from(scene)
+                if (candidate.isBetterThan(best)) {
+                    best = candidate
+                }
+            }
+            return best
+        }
+    }
+
+    internal data class DirectFolderSummary(
+        val newestUpdatedAtEpochMs: Long = 0,
+        val thumbnailUrl: String? = null,
+    ) {
+        fun isBetterThan(other: DirectFolderSummary): Boolean =
+            newestUpdatedAtEpochMs > other.newestUpdatedAtEpochMs ||
+                (newestUpdatedAtEpochMs == other.newestUpdatedAtEpochMs && thumbnailUrl != null && other.thumbnailUrl == null)
+
+        companion object {
+            fun from(scene: FolderScene): DirectFolderSummary =
+                DirectFolderSummary(
+                    newestUpdatedAtEpochMs = scene.updatedAtEpochMs,
+                    thumbnailUrl = scene.screenshotUrl?.takeIf { it.isNotBlank() },
+                )
         }
     }
 

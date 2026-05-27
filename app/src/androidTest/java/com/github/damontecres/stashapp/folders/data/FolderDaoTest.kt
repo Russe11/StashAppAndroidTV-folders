@@ -67,8 +67,22 @@ class FolderDaoTest {
             val serverUrl = "https://stash.example.test"
             dao.upsertFolders(
                 listOf(
-                    folderNode(serverUrl, path = "/Movies/", name = "Movies", parentPath = "/", directCount = 1),
-                    folderNode(serverUrl, path = "/Movies/Sub/", name = "Sub", parentPath = "/Movies/", directCount = 1),
+                    folderNode(
+                        serverUrl,
+                        path = "/Movies/",
+                        name = "Movies",
+                        parentPath = "/",
+                        directCount = 1,
+                        newestDirectUpdatedAtEpochMs = 300,
+                    ),
+                    folderNode(
+                        serverUrl,
+                        path = "/Movies/Sub/",
+                        name = "Sub",
+                        parentPath = "/Movies/",
+                        directCount = 1,
+                        newestDirectUpdatedAtEpochMs = 500,
+                    ),
                     folderNode(serverUrl, path = "/OnlyNested/", name = "OnlyNested", parentPath = "/", directCount = 0),
                 ),
             )
@@ -107,15 +121,82 @@ class FolderDaoTest {
         }
 
     @Test
+    fun pagingNewestItems_usesMaterializedFolderRecencyAndThumbnail() =
+        runBlocking {
+            val serverUrl = "https://stash.example.test"
+            dao.upsertFolders(
+                listOf(
+                    folderNode(
+                        serverUrl,
+                        path = "/Movies/",
+                        name = "Movies",
+                        parentPath = "/",
+                        directCount = 1,
+                        newestDirectUpdatedAtEpochMs = 900,
+                        newestDirectThumbnailUrl = "materialized.jpg",
+                    ),
+                ),
+            )
+            dao.upsertScenes(
+                listOf(
+                    folderScene(
+                        serverUrl,
+                        sceneId = "1",
+                        path = "/Movies/direct.mp4",
+                        parentPath = "/Movies/",
+                        updatedAtEpochMs = 100,
+                    ),
+                ),
+            )
+
+            val result =
+                dao
+                    .pagingNewestItems(serverUrl = serverUrl)
+                    .load(
+                        PagingSource.LoadParams.Refresh(
+                            key = null,
+                            loadSize = 20,
+                            placeholdersEnabled = false,
+                        ),
+                    )
+
+            val page = result as PagingSource.LoadResult.Page<Int, NewItemRow>
+            val folder = page.data.first { it.itemType == NewItemRow.TYPE_FOLDER }
+            assertEquals(900, folder.updatedAtEpochMs)
+            assertEquals("materialized.jpg", folder.thumbnailUrl)
+        }
+
+    @Test
     fun pagingNewFolderItems_showsImmediateFoldersAndDirectScenesOnly() =
         runBlocking {
             val serverUrl = "https://stash.example.test"
             dao.upsertFolders(
                 listOf(
                     folderNode(serverUrl, path = "/Movies/Alpha/", name = "Alpha", parentPath = "/Movies/", directCount = 0),
-                    folderNode(serverUrl, path = "/Movies/Beta/", name = "Beta", parentPath = "/Movies/", directCount = 1),
-                    folderNode(serverUrl, path = "/Movies/Beta/Nested/", name = "Nested", parentPath = "/Movies/Beta/", directCount = 1),
-                    folderNode(serverUrl, path = "/Other/", name = "Other", parentPath = "/", directCount = 1),
+                    folderNode(
+                        serverUrl,
+                        path = "/Movies/Beta/",
+                        name = "Beta",
+                        parentPath = "/Movies/",
+                        directCount = 1,
+                        newestDirectUpdatedAtEpochMs = 500,
+                    ),
+                    folderNode(
+                        serverUrl,
+                        path = "/Movies/Beta/Nested/",
+                        name = "Nested",
+                        parentPath = "/Movies/Beta/",
+                        directCount = 1,
+                        newestDirectUpdatedAtEpochMs = 500,
+                    ),
+                    folderNode(
+                        serverUrl,
+                        path = "/Other/",
+                        name = "Other",
+                        parentPath = "/",
+                        directCount = 1,
+                        newestDirectUpdatedAtEpochMs = 600,
+                    ),
                 ),
             )
             dao.upsertScenes(
@@ -156,6 +237,8 @@ class FolderDaoTest {
         name: String,
         parentPath: String,
         directCount: Int,
+        newestDirectUpdatedAtEpochMs: Long = 0,
+        newestDirectThumbnailUrl: String? = null,
     ): FolderNode =
         FolderNode(
             serverUrl = serverUrl,
@@ -165,6 +248,8 @@ class FolderDaoTest {
             recursiveCount = directCount,
             directCount = directCount,
             thumbnailUrl = null,
+            newestDirectUpdatedAtEpochMs = newestDirectUpdatedAtEpochMs,
+            newestDirectThumbnailUrl = newestDirectThumbnailUrl,
         )
 
     private fun folderScene(

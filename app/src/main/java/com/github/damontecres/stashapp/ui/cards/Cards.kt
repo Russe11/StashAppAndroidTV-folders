@@ -74,6 +74,7 @@ import coil3.imageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.size.Precision
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.actions.StashAction
 import com.github.damontecres.stashapp.api.fragment.FullSceneData
@@ -461,7 +462,7 @@ fun CardImage(
     @DrawableRes defaultImageDrawableRes: Int?,
     imageContent: @Composable (BoxScope.() -> Unit)?,
     modifier: Modifier = Modifier,
-    crossFade: Boolean = true,
+    crossFade: Boolean = false,
 ) {
     Box(
         modifier =
@@ -484,6 +485,7 @@ fun CardImage(
                         .Builder(LocalContext.current)
                         .data(imageUrl)
                         .crossfade(crossFade)
+                        .precision(Precision.INEXACT)
                         .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,

@@ -66,7 +66,7 @@ fun FolderListPane(
     // Keep the focused row in view as the user navigates with the D-pad.
     LaunchedEffect(focusedRowIndex, rowCount) {
         if (focusedRowIndex in 0 until rowCount) {
-            runCatching { listState.animateScrollToItem(focusedRowIndex) }
+            runCatching { listState.scrollToItem(focusedRowIndex) }
         }
     }
     LaunchedEffect(listState) {

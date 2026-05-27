@@ -21,6 +21,7 @@ import com.github.damontecres.stashapp.data.room.MIGRATION_4_TO_5
 import com.github.damontecres.stashapp.folders.data.MIGRATION_5_TO_6
 import com.github.damontecres.stashapp.folders.data.MIGRATION_6_TO_7
 import com.github.damontecres.stashapp.folders.data.MIGRATION_7_TO_8
+import com.github.damontecres.stashapp.folders.data.MIGRATION_8_TO_9
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.util.AppUpgradeHandler
 import com.github.damontecres.stashapp.util.QueryEngine
@@ -166,7 +167,7 @@ class StashApplication : Application() {
         database =
             Room
                 .databaseBuilder(this, AppDatabase::class.java, dbName)
-                .addMigrations(MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8)
+                .addMigrations(MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9)
                 .fallbackToDestructiveMigration()
                 .build()
     }

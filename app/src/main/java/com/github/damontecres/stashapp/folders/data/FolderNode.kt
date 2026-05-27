@@ -1,6 +1,7 @@
 package com.github.damontecres.stashapp.folders.data
 
 import androidx.compose.runtime.Immutable
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 
@@ -18,6 +19,8 @@ import androidx.room.Index
  * scenes whose `parentPath` exactly equals this `path`.
  * `thumbnailUrl` is materialised during sync so browsing a folder does not need to
  * run one recursive scene lookup per visible child row.
+ * `newestDirectUpdatedAtEpochMs` / `newestDirectThumbnailUrl` summarize direct
+ * folder videos only for the New feed.
  */
 @Entity(
     tableName = "folders",
@@ -41,4 +44,7 @@ data class FolderNode(
     val recursiveCount: Int,
     val directCount: Int,
     val thumbnailUrl: String?,
+    @ColumnInfo(defaultValue = "0")
+    val newestDirectUpdatedAtEpochMs: Long = 0,
+    val newestDirectThumbnailUrl: String? = null,
 )

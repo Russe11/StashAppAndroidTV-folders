@@ -1,6 +1,5 @@
 package com.github.damontecres.stashapp.folders.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,9 +21,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,12 +30,9 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import coil3.size.Precision
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.folders.data.FolderScene
+import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.components.CircularProgress
 import java.time.Instant
 import java.time.ZoneId
@@ -52,13 +45,15 @@ fun FolderVideoListPane(
     items: LazyPagingItems<FolderScene>,
     focusedVideoIndex: Int,
     sort: FolderVideoSort,
+    uiConfig: ComposeUiConfig,
+    previewsActive: Boolean,
     modifier: Modifier = Modifier,
     onVisibleRowCountChange: (Int) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(focusedVideoIndex, items.itemCount) {
         if (focusedVideoIndex in 0 until items.itemCount) {
-            runCatching { listState.animateScrollToItem(focusedVideoIndex) }
+            runCatching { listState.scrollToItem(focusedVideoIndex) }
         }
     }
     LaunchedEffect(listState) {
@@ -123,6 +118,8 @@ fun FolderVideoListPane(
                                 scene = scene,
                                 isSelected = focusedVideoIndex == index,
                                 sort = sort,
+                                uiConfig = uiConfig,
+                                previewSelected = previewsActive && focusedVideoIndex == index,
                             )
                         }
                     }
@@ -157,6 +154,8 @@ private fun FolderVideoRow(
     scene: FolderScene,
     isSelected: Boolean,
     sort: FolderVideoSort,
+    uiConfig: ComposeUiConfig,
+    previewSelected: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val containerColor =
@@ -172,9 +171,12 @@ private fun FolderVideoRow(
                 .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FolderVideoThumbnail(
-            scene = scene,
+        SceneThumbnailPreview(
+            thumbnailUrl = scene.screenshotUrl,
+            previewUrl = scene.previewUrl,
             contentDescription = displayTitle,
+            selected = previewSelected,
+            uiConfig = uiConfig,
             modifier =
                 Modifier
                     .width(112.dp)
@@ -198,41 +200,6 @@ private fun FolderVideoRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-    }
-}
-
-@Composable
-private fun FolderVideoThumbnail(
-    scene: FolderScene,
-    contentDescription: String,
-    modifier: Modifier = Modifier,
-) {
-    val context = LocalContext.current
-    val placeholder = painterResource(id = R.drawable.default_scene)
-    if (!scene.screenshotUrl.isNullOrBlank()) {
-        val request =
-            remember(scene.screenshotUrl) {
-                ImageRequest.Builder(context)
-                    .data(scene.screenshotUrl)
-                    .crossfade(false)
-                    .precision(Precision.INEXACT)
-                    .build()
-            }
-        AsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = ContentScale.Crop,
-            placeholder = placeholder,
-            error = placeholder,
-        )
-    } else {
-        Image(
-            painter = placeholder,
-            contentDescription = null,
-            modifier = modifier,
-            contentScale = ContentScale.Crop,
-        )
     }
 }
 

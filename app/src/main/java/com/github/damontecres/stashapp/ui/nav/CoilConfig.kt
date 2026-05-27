@@ -34,7 +34,7 @@ fun CoilConfig(
                     .directory(ctx.cacheDir.resolve("coil3_image_cache"))
                     .maxSizeBytes(diskCacheSize)
                     .build(),
-            ).crossfade(true)
+            ).crossfade(false)
             .logger(if (cacheLogging) DebugLogger() else null)
             .components {
                 add(

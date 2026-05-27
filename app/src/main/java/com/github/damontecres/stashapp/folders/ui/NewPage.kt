@@ -234,6 +234,8 @@ fun NewPage(
         NewFeedListPane(
             items = items,
             focusedRowIndex = focusedRowIndex,
+            uiConfig = uiConfig,
+            previewsActive = paneFocus == NewPaneFocus.List,
             onFocusedRowChange = { updateFocusedRowIndex(it) },
             onActivateRow = activateSelected,
             onVisibleRowCountChange = { visibleRows = it },
@@ -264,6 +266,8 @@ fun NewPage(
 private fun NewFeedListPane(
     items: LazyPagingItems<NewItemRow>,
     focusedRowIndex: Int,
+    uiConfig: ComposeUiConfig,
+    previewsActive: Boolean,
     onFocusedRowChange: (Int) -> Unit,
     onActivateRow: () -> Unit,
     onVisibleRowCountChange: (Int) -> Unit,
@@ -272,7 +276,7 @@ private fun NewFeedListPane(
     val listState = rememberLazyListState()
     LaunchedEffect(focusedRowIndex, items.itemCount) {
         if (focusedRowIndex in 0 until items.itemCount) {
-            runCatching { listState.animateScrollToItem(focusedRowIndex) }
+            runCatching { listState.scrollToItem(focusedRowIndex) }
         }
     }
     LaunchedEffect(listState) {
@@ -320,6 +324,8 @@ private fun NewFeedListPane(
                             NewListItem(
                                 item = item,
                                 selected = focusedRowIndex == index,
+                                uiConfig = uiConfig,
+                                previewSelected = previewsActive && focusedRowIndex == index,
                                 onClick = {
                                     onFocusedRowChange(index)
                                     onActivateRow()
@@ -453,6 +459,8 @@ private fun NewFolderInspector(
 private fun NewListItem(
     item: NewItemRow,
     selected: Boolean,
+    uiConfig: ComposeUiConfig,
+    previewSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -482,8 +490,12 @@ private fun NewListItem(
             )
         },
         leadingContent = {
-            NewItemThumbnail(
-                item = item,
+            SceneThumbnailPreview(
+                thumbnailUrl = item.thumbnailUrl,
+                previewUrl = item.previewUrl,
+                contentDescription = item.displayTitle(),
+                selected = previewSelected && item.isScene,
+                uiConfig = uiConfig,
                 modifier =
                     Modifier
                         .width(112.dp)

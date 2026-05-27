@@ -60,6 +60,7 @@ interface FolderDao {
     @Query(
         "SELECT f.serverUrl, f.path, f.name, f.parentPath, f.recursiveCount, f.directCount, " +
             "CASE WHEN :includeThumbnails THEN f.thumbnailUrl ELSE NULL END AS thumbnailUrl, " +
+            "f.newestDirectUpdatedAtEpochMs, f.newestDirectThumbnailUrl, " +
             "(SELECT COUNT(*) FROM folders c WHERE c.serverUrl = f.serverUrl AND c.parentPath = f.path) AS childFolderCount " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.parentPath = :parentPath " +
@@ -124,13 +125,9 @@ interface FolderDao {
             "WHERE serverUrl = :serverUrl " +
             "UNION ALL " +
             "SELECT f.serverUrl, 'folder' AS itemType, f.path AS itemId, f.path, f.parentPath, f.name AS title, " +
-            "(SELECT s.screenshotUrl FROM folder_scenes s " +
-            " WHERE s.serverUrl = f.serverUrl AND s.parentPath = f.path " +
-            " ORDER BY s.updatedAtEpochMs DESC, s.path COLLATE NOCASE ASC LIMIT 1) AS thumbnailUrl, " +
+            "f.newestDirectThumbnailUrl AS thumbnailUrl, " +
             "NULL AS previewUrl, " +
-            "(SELECT s.updatedAtEpochMs FROM folder_scenes s " +
-            " WHERE s.serverUrl = f.serverUrl AND s.parentPath = f.path " +
-            " ORDER BY s.updatedAtEpochMs DESC, s.path COLLATE NOCASE ASC LIMIT 1) AS updatedAtEpochMs, " +
+            "f.newestDirectUpdatedAtEpochMs AS updatedAtEpochMs, " +
             "f.directCount " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.directCount > 0 " +
@@ -161,8 +158,7 @@ interface FolderDao {
         "SELECT * FROM (" +
             "SELECT f.serverUrl, 'folder' AS itemType, f.path AS itemId, f.path, f.parentPath, f.name AS title, " +
             "f.thumbnailUrl AS thumbnailUrl, NULL AS previewUrl, " +
-            "COALESCE((SELECT MAX(s.updatedAtEpochMs) FROM folder_scenes s " +
-            " WHERE s.serverUrl = f.serverUrl AND s.parentPath = f.path), 0) AS updatedAtEpochMs, " +
+            "f.newestDirectUpdatedAtEpochMs AS updatedAtEpochMs, " +
             "f.directCount " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.parentPath = :parentPath " +

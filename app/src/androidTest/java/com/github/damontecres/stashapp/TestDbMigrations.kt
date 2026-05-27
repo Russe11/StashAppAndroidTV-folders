@@ -8,6 +8,7 @@ import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.data.room.AppDatabase
 import com.github.damontecres.stashapp.data.room.MIGRATION_4_TO_5
 import com.github.damontecres.stashapp.folders.data.MIGRATION_7_TO_8
+import com.github.damontecres.stashapp.folders.data.MIGRATION_8_TO_9
 import org.junit.Assert
 import org.junit.Rule
 import org.junit.Test
@@ -86,6 +87,54 @@ class TestDbMigrations {
         db.query("SELECT thumbnailUrl FROM folders WHERE serverUrl = ? AND path = ?", arrayOf("https://server", "/Movies/")).useCursor { c ->
             c.moveToFirst()
             Assert.assertTrue(c.isNull(0))
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate8To9_addsNewFeedMaterializedFolderFields() {
+        helper.createDatabase(testDbName, 8).apply {
+            execSQL(
+                "INSERT INTO folders VALUES (?, ?, ?, ?, ?, ?, ?)",
+                arrayOf<Any>(
+                    "https://server",
+                    "/Movies/",
+                    "Movies",
+                    "/",
+                    2,
+                    1,
+                    "thumb.jpg",
+                ),
+            )
+            execSQL(
+                "INSERT INTO folder_scenes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                arrayOf<Any?>(
+                    "https://server",
+                    "123",
+                    "/Movies/newest.mp4",
+                    "/Movies/",
+                    "Newest",
+                    null,
+                    null,
+                    0,
+                    "direct-thumb.jpg",
+                    null,
+                    "[]",
+                    12345L,
+                ),
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(testDbName, 9, true, MIGRATION_8_TO_9)
+
+        db.query(
+            "SELECT newestDirectUpdatedAtEpochMs, newestDirectThumbnailUrl FROM folders WHERE serverUrl = ? AND path = ?",
+            arrayOf("https://server", "/Movies/"),
+        ).useCursor { c ->
+            c.moveToFirst()
+            Assert.assertEquals(12345L, c.getLong(0))
+            Assert.assertEquals("direct-thumb.jpg", c.getString(1))
         }
     }
 }

@@ -388,6 +388,8 @@ fun FoldersPage(
                     items = videoItems,
                     focusedVideoIndex = focusedVideoIndex,
                     sort = videoSort,
+                    uiConfig = uiConfig,
+                    previewsActive = paneFocus == FoldersPaneFocus.Video,
                     onVisibleRowCountChange = { visibleVideoRows = it },
                     modifier = Modifier.fillMaxSize(),
                 )

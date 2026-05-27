@@ -121,3 +121,31 @@ val MIGRATION_7_TO_8 =
             db.execSQL("ALTER TABLE `folders` ADD COLUMN `thumbnailUrl` TEXT")
         }
     }
+
+/**
+ * Adds direct-video summary fields to `folders` for the New feed.
+ *
+ * The New feed should sort folder rows by the newest direct video in that folder
+ * and show that video's thumbnail. Materialising the values during sync avoids
+ * two correlated ordered lookups into `folder_scenes` for every folder row while
+ * paging the feed.
+ */
+val MIGRATION_8_TO_9 =
+    object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `folders` ADD COLUMN `newestDirectUpdatedAtEpochMs` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `folders` ADD COLUMN `newestDirectThumbnailUrl` TEXT")
+            db.execSQL(
+                "UPDATE `folders` SET `newestDirectUpdatedAtEpochMs` = " +
+                    "COALESCE((SELECT s.`updatedAtEpochMs` FROM `folder_scenes` s " +
+                    "WHERE s.`serverUrl` = `folders`.`serverUrl` AND s.`parentPath` = `folders`.`path` " +
+                    "ORDER BY s.`updatedAtEpochMs` DESC, s.`path` COLLATE NOCASE ASC LIMIT 1), 0)",
+            )
+            db.execSQL(
+                "UPDATE `folders` SET `newestDirectThumbnailUrl` = " +
+                    "(SELECT s.`screenshotUrl` FROM `folder_scenes` s " +
+                    "WHERE s.`serverUrl` = `folders`.`serverUrl` AND s.`parentPath` = `folders`.`path` " +
+                    "ORDER BY s.`updatedAtEpochMs` DESC, s.`path` COLLATE NOCASE ASC LIMIT 1)",
+            )
+        }
+    }

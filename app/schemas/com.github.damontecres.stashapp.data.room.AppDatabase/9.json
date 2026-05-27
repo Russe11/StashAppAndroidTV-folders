@@ -1,0 +1,394 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 9,
+    "identityHash": "99c4e803cd7623042cf5ccf82cfc2d93",
+    "entities": [
+      {
+        "tableName": "recent_search_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverUrl` TEXT NOT NULL, `id` TEXT NOT NULL, `dataType` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`serverUrl`, `id`, `dataType`))",
+        "fields": [
+          {
+            "fieldPath": "serverUrl",
+            "columnName": "serverUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dataType",
+            "columnName": "dataType",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverUrl",
+            "id",
+            "dataType"
+          ]
+        }
+      },
+      {
+        "tableName": "playback_effects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverUrl` TEXT NOT NULL, `id` TEXT NOT NULL, `dataType` INTEGER NOT NULL, `rotation` INTEGER NOT NULL, `brightness` INTEGER NOT NULL, `contrast` INTEGER NOT NULL, `saturation` INTEGER NOT NULL, `hue` INTEGER NOT NULL, `red` INTEGER NOT NULL, `green` INTEGER NOT NULL, `blue` INTEGER NOT NULL, `blur` INTEGER NOT NULL, PRIMARY KEY(`serverUrl`, `id`, `dataType`))",
+        "fields": [
+          {
+            "fieldPath": "serverUrl",
+            "columnName": "serverUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dataType",
+            "columnName": "dataType",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.rotation",
+            "columnName": "rotation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.brightness",
+            "columnName": "brightness",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.contrast",
+            "columnName": "contrast",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.saturation",
+            "columnName": "saturation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.hue",
+            "columnName": "hue",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.red",
+            "columnName": "red",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.green",
+            "columnName": "green",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.blue",
+            "columnName": "blue",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoFilter.blur",
+            "columnName": "blur",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverUrl",
+            "id",
+            "dataType"
+          ]
+        }
+      },
+      {
+        "tableName": "folder_scenes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverUrl` TEXT NOT NULL, `sceneId` TEXT NOT NULL, `path` TEXT NOT NULL, `parentPath` TEXT NOT NULL, `title` TEXT, `durationSeconds` REAL, `rating100` INTEGER, `organized` INTEGER NOT NULL, `screenshotUrl` TEXT, `previewUrl` TEXT, `tagIdsJson` TEXT NOT NULL DEFAULT '[]', `updatedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`serverUrl`, `sceneId`))",
+        "fields": [
+          {
+            "fieldPath": "serverUrl",
+            "columnName": "serverUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sceneId",
+            "columnName": "sceneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentPath",
+            "columnName": "parentPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationSeconds",
+            "columnName": "durationSeconds",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "rating100",
+            "columnName": "rating100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "organized",
+            "columnName": "organized",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "screenshotUrl",
+            "columnName": "screenshotUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "previewUrl",
+            "columnName": "previewUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tagIdsJson",
+            "columnName": "tagIdsJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverUrl",
+            "sceneId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_folder_scenes_path",
+            "unique": false,
+            "columnNames": [
+              "path"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folder_scenes_path` ON `${TABLE_NAME}` (`path`)"
+          },
+          {
+            "name": "index_folder_scenes_parentPath",
+            "unique": false,
+            "columnNames": [
+              "parentPath"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folder_scenes_parentPath` ON `${TABLE_NAME}` (`parentPath`)"
+          },
+          {
+            "name": "index_folder_scenes_serverUrl_parentPath",
+            "unique": false,
+            "columnNames": [
+              "serverUrl",
+              "parentPath"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_parentPath` ON `${TABLE_NAME}` (`serverUrl`, `parentPath`)"
+          },
+          {
+            "name": "index_folder_scenes_serverUrl_path",
+            "unique": false,
+            "columnNames": [
+              "serverUrl",
+              "path"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_path` ON `${TABLE_NAME}` (`serverUrl`, `path`)"
+          }
+        ]
+      },
+      {
+        "tableName": "folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverUrl` TEXT NOT NULL, `path` TEXT NOT NULL, `name` TEXT NOT NULL, `parentPath` TEXT NOT NULL, `recursiveCount` INTEGER NOT NULL, `directCount` INTEGER NOT NULL, `thumbnailUrl` TEXT, `newestDirectUpdatedAtEpochMs` INTEGER NOT NULL DEFAULT 0, `newestDirectThumbnailUrl` TEXT, PRIMARY KEY(`serverUrl`, `path`))",
+        "fields": [
+          {
+            "fieldPath": "serverUrl",
+            "columnName": "serverUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentPath",
+            "columnName": "parentPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recursiveCount",
+            "columnName": "recursiveCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "directCount",
+            "columnName": "directCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "thumbnailUrl",
+            "columnName": "thumbnailUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "newestDirectUpdatedAtEpochMs",
+            "columnName": "newestDirectUpdatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "newestDirectThumbnailUrl",
+            "columnName": "newestDirectThumbnailUrl",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverUrl",
+            "path"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_folders_parentPath",
+            "unique": false,
+            "columnNames": [
+              "parentPath"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folders_parentPath` ON `${TABLE_NAME}` (`parentPath`)"
+          },
+          {
+            "name": "index_folders_serverUrl_parentPath",
+            "unique": false,
+            "columnNames": [
+              "serverUrl",
+              "parentPath"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folders_serverUrl_parentPath` ON `${TABLE_NAME}` (`serverUrl`, `parentPath`)"
+          },
+          {
+            "name": "index_folders_serverUrl_name",
+            "unique": false,
+            "columnNames": [
+              "serverUrl",
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folders_serverUrl_name` ON `${TABLE_NAME}` (`serverUrl`, `name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "folder_sync_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverUrl` TEXT NOT NULL, `lastSyncAtEpochMs` INTEGER, `scanComplete` INTEGER NOT NULL, `scanProgressTotal` INTEGER, `scanProgressDone` INTEGER, PRIMARY KEY(`serverUrl`))",
+        "fields": [
+          {
+            "fieldPath": "serverUrl",
+            "columnName": "serverUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncAtEpochMs",
+            "columnName": "lastSyncAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "scanComplete",
+            "columnName": "scanComplete",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scanProgressTotal",
+            "columnName": "scanProgressTotal",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "scanProgressDone",
+            "columnName": "scanProgressDone",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverUrl"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '99c4e803cd7623042cf5ccf82cfc2d93')"
+    ]
+  }
+}

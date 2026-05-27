@@ -100,6 +100,35 @@ class LibraryIndexerPathTest {
         assertNull(LibraryIndexer.representativeThumbnailFor("/root/a/", rows))
     }
 
+    @Test
+    fun directFolderSummary_usesNewestDirectSceneOnly() {
+        val rows =
+            listOf(
+                folderScene(sceneId = "1", path = "/root/a/old-direct.mp4", organized = false, screenshotUrl = "old").copy(updatedAtEpochMs = 100),
+                folderScene(sceneId = "2", path = "/root/a/new-direct.mp4", organized = false, screenshotUrl = "new").copy(updatedAtEpochMs = 300),
+                folderScene(sceneId = "3", path = "/root/a/nested/newer.mp4", organized = true, screenshotUrl = "nested").copy(updatedAtEpochMs = 900),
+                folderScene(sceneId = "4", path = "/root/ab/sibling.mp4", organized = true, screenshotUrl = "sibling").copy(updatedAtEpochMs = 800),
+            )
+
+        assertEquals(
+            LibraryIndexer.DirectFolderSummary(newestUpdatedAtEpochMs = 300, thumbnailUrl = "new"),
+            LibraryIndexer.directFolderSummaryFor("/root/a/", rows),
+        )
+    }
+
+    @Test
+    fun directFolderSummary_keepsThumbnailWhenUpdateTimeIsZero() {
+        val rows =
+            listOf(
+                folderScene(sceneId = "1", path = "/root/a/direct.mp4", organized = false, screenshotUrl = "direct").copy(updatedAtEpochMs = 0),
+            )
+
+        assertEquals(
+            LibraryIndexer.DirectFolderSummary(newestUpdatedAtEpochMs = 0, thumbnailUrl = "direct"),
+            LibraryIndexer.directFolderSummaryFor("/root/a/", rows),
+        )
+    }
+
     private fun folderScene(
         sceneId: String,
         path: String,
