@@ -15,6 +15,11 @@ enum ThemeStyle {
   DARK = 2;
 }
 
+enum FolderVideoSortPreference {
+  FOLDER_VIDEO_SORT_NEWEST = 0;
+  FOLDER_VIDEO_SORT_LONGEST = 1;
+}
+
 message InterfacePreferences {
   bool use_compose_ui = 1;
   int32 card_size = 2;
@@ -44,6 +49,7 @@ message InterfacePreferences {
   bool page_with_remote_buttons = 21;
 
   bool dpad_skip_indicator = 22;
+  FolderVideoSortPreference folder_video_sort = 23;
 }
 
 enum TabType {

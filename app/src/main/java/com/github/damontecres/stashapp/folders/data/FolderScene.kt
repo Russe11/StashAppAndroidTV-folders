@@ -30,10 +30,8 @@ import androidx.room.Index
         Index(value = ["path"]),
         Index(value = ["parentPath"]),
         Index(value = ["serverUrl", "parentPath"]),
-        // Speeds up the recursive scene query, which does
-        // `WHERE serverUrl = ? AND path LIKE :pathPrefix || '%'`. Without this
-        // composite index Room falls back to the single-column `path` index and
-        // then filters by serverUrl in memory.
+        // Speeds up server-scoped path scans such as the sync rebuild's
+        // `WHERE serverUrl = ? ORDER BY path` query shape.
         Index(value = ["serverUrl", "path"]),
     ],
 )

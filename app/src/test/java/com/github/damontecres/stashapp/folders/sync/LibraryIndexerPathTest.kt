@@ -11,8 +11,7 @@ import org.junit.Test
  * Regression coverage for the `/prv/docs/` empty-grid bug, which was caused by
  * [LibraryIndexer.normalizeFilePath] preserving the (missing) leading slash
  * shape from Stash, while [LibraryIndexer.parentPathOf] always prepended one.
- * The folder browser's `path LIKE :pathPrefix || '%'` query then missed every
- * scene whose raw path arrived without a leading slash.
+ * The folder browser then had inconsistent canonical paths in its local cache.
  */
 class LibraryIndexerPathTest {
     @Test
@@ -53,8 +52,7 @@ class LibraryIndexerPathTest {
         val normalized = LibraryIndexer.normalizeFilePath("prv/docs/foo.mp4")
         val parent = LibraryIndexer.parentPathOf(normalized)
         assertEquals("/prv/docs/", parent)
-        // The folder query is `path LIKE parent || '%'`; this assertion
-        // captures that contract explicitly.
+        // Folder rows and scene rows share this canonical prefix contract.
         assert(normalized.startsWith(parent)) {
             "normalized path $normalized must start with parentPath $parent"
         }

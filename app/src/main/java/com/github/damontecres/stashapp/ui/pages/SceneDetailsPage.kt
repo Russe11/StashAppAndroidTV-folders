@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -112,10 +113,16 @@ fun SceneDetailsPage(
     uiConfig: ComposeUiConfig,
     modifier: Modifier = Modifier,
     onUpdateTitle: ((AnnotatedString) -> Unit)? = null,
+    autoFocusHeader: Boolean = true,
+    focusRequestSignal: Int = 0,
+    cancelLoadOnDispose: Boolean = false,
+    onFirstButtonLeft: (() -> Unit)? = null,
+    compactPreview: Boolean = false,
 ) {
+    val viewModelStoreOwner = LocalViewModelStoreOwner.current!!
     val viewModel =
         ViewModelProvider.create(
-            LocalViewModelStoreOwner.current!!,
+            viewModelStoreOwner,
             SceneDetailsViewModel.Factory,
             MutableCreationExtras().apply {
                 set(SceneDetailsViewModel.SERVER_KEY, server)
@@ -125,7 +132,7 @@ fun SceneDetailsPage(
                     uiConfig.preferences.searchPreferences.maxResults,
                 )
             },
-        )[SceneDetailsViewModel::class]
+        ).get("SceneDetails:$sceneId", SceneDetailsViewModel::class.java)
     val loadingState by viewModel.loadingState.observeAsState()
     val tags by viewModel.tags.observeAsState(listOf())
     val performers by viewModel.performers.observeAsState(listOf())
@@ -138,8 +145,15 @@ fun SceneDetailsPage(
     val suggestions by viewModel.suggestions.observeAsState(listOf())
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(viewModel) {
         viewModel.init()
+    }
+    DisposableEffect(viewModel, cancelLoadOnDispose) {
+        onDispose {
+            if (cancelLoadOnDispose) {
+                viewModel.cancelLoading()
+            }
+        }
     }
 
     when (val state = loadingState) {
@@ -205,6 +219,10 @@ fun SceneDetailsPage(
                 onRatingChange = {
                     viewModel.updateRating(it)
                 },
+                autoFocusHeader = autoFocusHeader,
+                focusRequestSignal = focusRequestSignal,
+                onFirstButtonLeft = onFirstButtonLeft,
+                compactPreview = compactPreview,
                 onSceneDelete = { deleteFiles, deleteGenerated ->
                     viewModel.deleteScene(deleteFiles, deleteGenerated) {
                         if (it) {
@@ -259,6 +277,10 @@ fun SceneDetails(
     onRatingChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     showRatingBar: Boolean = true,
+    autoFocusHeader: Boolean = true,
+    focusRequestSignal: Int = 0,
+    onFirstButtonLeft: (() -> Unit)? = null,
+    compactPreview: Boolean = false,
 ) {
     val context = LocalContext.current
     val navigationManager = LocalGlobalContext.current.navigationManager
@@ -447,6 +469,7 @@ fun SceneDetails(
                 studio = studio,
                 alwaysStartFromBeginning = server.serverPreferences.alwaysStartFromBeginning,
                 showEditButton = uiConfig.readOnlyModeDisabled,
+                compactPreview = compactPreview,
                 editOnClick = {
                     showDialog =
                         DialogParams(
@@ -559,8 +582,9 @@ fun SceneDetails(
                                         oCountAction.invoke(MutationEngine::resetOCounter)
                                     },
                                 ),
-                        )
+                    )
                 },
+                onFirstButtonLeft = onFirstButtonLeft,
             )
         }
         val startPadding = 24.dp
@@ -619,8 +643,11 @@ fun SceneDetails(
         dismissOnClick = false,
         uiConfig = uiConfig,
     )
-    LaunchedEffect(Unit) {
-        if (savedFocusPosition != null) {
+    LaunchedEffect(focusRequestSignal) {
+        if (!autoFocusHeader && focusRequestSignal == 0) {
+            return@LaunchedEffect
+        }
+        if (autoFocusHeader && savedFocusPosition != null) {
             focusPosition = savedFocusPosition
 //            Log.v("SceneDetails", "Focusing on $focusPosition")
             focusPositionRequester.tryRequestFocus()

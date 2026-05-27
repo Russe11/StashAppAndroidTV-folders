@@ -238,7 +238,9 @@ class NavigationManagerLeanback(
                     throw IllegalArgumentException("ChooseTheme not supported unless using Compose")
                 }
 
-                Destination.Folders -> {
+                is Destination.Folders,
+                Destination.New,
+                -> {
                     throw IllegalArgumentException("Folders not supported unless using Compose")
                 }
             }

@@ -77,10 +77,9 @@ val MIGRATION_5_TO_6 =
 /**
  * Adds two composite indexes that the Folders queries already lean on:
  *
- *   - `folder_scenes(serverUrl, path)`: the recursive scene query does
- *     `WHERE serverUrl = ? AND path LIKE :pathPrefix || '%'`. With only the
- *     single-column `path` index, SQLite walks every row matching the prefix
- *     across *all* servers and then re-filters by serverUrl in memory.
+ *   - `folder_scenes(serverUrl, path)`: server-scoped path scans can avoid
+ *     walking path rows from every configured server and then re-filtering
+ *     by serverUrl in memory.
  *   - `folders(serverUrl, name)`: the left-pane subfolder list orders by
  *     `name COLLATE NOCASE`. Without this index Room builds a transient sort
  *     buffer for each folder change.

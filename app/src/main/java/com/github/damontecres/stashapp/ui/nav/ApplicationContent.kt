@@ -118,9 +118,11 @@ fun ApplicationContent(
         buildList {
             add(DrawerPage.SearchPage)
             add(DrawerPage.HomePage)
+            add(DrawerPage.NewPage)
             add(DrawerPage.FoldersPage)
             addAll(
                 DataType.entries
+                    .filter(::isTopLevelMenuDataType)
                     .filter { server.serverPreferences.showMenuItem(it) }
                     .map { DrawerPage.DataTypePage(it) },
             )
@@ -174,7 +176,11 @@ fun ApplicationContent(
                         DrawerPage.SearchPage
                     }
 
-                    Destination.Folders -> {
+                    Destination.New -> {
+                        DrawerPage.NewPage
+                    }
+
+                    is Destination.Folders -> {
                         DrawerPage.FoldersPage
                     }
 
@@ -228,8 +234,12 @@ fun ApplicationContent(
                                 Destination.Search
                             }
 
+                            DrawerPage.NewPage -> {
+                                Destination.New
+                            }
+
                             DrawerPage.FoldersPage -> {
-                                Destination.Folders
+                                Destination.Folders()
                             }
 
                             DrawerPage.SettingPage -> {
@@ -316,3 +326,18 @@ fun ApplicationContent(
         }
     }
 }
+
+internal fun isTopLevelMenuDataType(dataType: DataType): Boolean =
+    when (dataType) {
+        DataType.GROUP,
+        DataType.PERFORMER,
+        DataType.STUDIO,
+        -> false
+
+        DataType.SCENE,
+        DataType.MARKER,
+        DataType.TAG,
+        DataType.IMAGE,
+        DataType.GALLERY,
+        -> true
+    }

@@ -37,6 +37,7 @@ import com.github.damontecres.stashapp.ui.pages.StudioPage
 import com.github.damontecres.stashapp.ui.pages.TagPage
 import com.github.damontecres.stashapp.ui.pages.UpdateAppPage
 import com.github.damontecres.stashapp.folders.ui.FoldersPage
+import com.github.damontecres.stashapp.folders.ui.NewPage
 import com.github.damontecres.stashapp.util.StashServer
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -226,7 +227,18 @@ fun DestinationContent(
             )
         }
 
-        Destination.Folders -> {
+        Destination.New -> {
+            NewPage(
+                server = server,
+                navigationManager = navManager,
+                uiConfig = composeUiConfig,
+                itemOnClick = itemOnClick,
+                modifier = modifier,
+                onUpdateTitle = onUpdateTitle,
+            )
+        }
+
+        is Destination.Folders -> {
             FoldersPage(
                 server = server,
                 navigationManager = navManager,
@@ -234,6 +246,7 @@ fun DestinationContent(
                 itemOnClick = itemOnClick,
                 longClicker = longClicker,
                 modifier = modifier,
+                initialPath = destination.initialPath,
                 onUpdateTitle = onUpdateTitle,
                 onOpenNavigationDrawer = onOpenNavigationDrawer,
                 navigationDrawerOpen = navigationDrawerOpen,

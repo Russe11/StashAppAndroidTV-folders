@@ -25,6 +25,7 @@
     <string name="fa_pause" translatable="false">&#xf04c;</string>
     <string name="fa_arrow_down_long" translatable="false">&#xf175;</string>
     <string name="fa_arrow_up_long" translatable="false">&#xf176;</string>
+    <string name="fa_clock" translatable="false">&#xf017;</string>
     <string name="fa_angle_up" translatable="false">&#xf106;</string>
     <string name="fa_angles_up" translatable="false">&#xf102;</string>
     <string name="fa_angle_down" translatable="false">&#xf107;</string>
@@ -41,9 +42,20 @@
     <string name="advanced_settings">Advanced Settings</string>
     <string name="home">Home</string>
     <string name="folders">Folders</string>
+    <string name="home_newest_videos">Newest videos</string>
+    <string name="new_items">New</string>
+    <string name="new_empty">No new items yet — indexing in progress.</string>
+    <string name="new_folder_type">Folder</string>
+    <string name="new_video_type">Video</string>
     <string name="folders_indexing">Indexing %1$d / %2$d scenes…</string>
     <string name="folders_force_resync">Force resync</string>
     <string name="folders_empty">No folders yet — indexing in progress.</string>
+    <string name="folders_this_folder">This folder</string>
+    <string name="folders_direct_videos">%1$d direct videos</string>
+    <string name="folders_direct_total">%1$d direct • %2$d total</string>
+    <string name="folders_no_direct_videos">No direct videos</string>
+    <string name="folders_sort_newest">Newest</string>
+    <string name="folders_sort_longest">Longest</string>
 
     <string name="app_update_url" translatable="false">https://api.github.com/repos/Russe11/StashAppAndroidTV-folders/releases/latest</string>
 

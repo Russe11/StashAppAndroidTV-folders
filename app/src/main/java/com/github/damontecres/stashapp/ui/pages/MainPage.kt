@@ -53,19 +53,27 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.transitionFactory
+import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.api.StatisticsQuery
+import com.github.damontecres.stashapp.api.fragment.SlimSceneData
 import com.github.damontecres.stashapp.api.fragment.GalleryData
 import com.github.damontecres.stashapp.api.fragment.GroupData
 import com.github.damontecres.stashapp.api.fragment.ImageData
 import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.PerformerData
-import com.github.damontecres.stashapp.api.fragment.SlimSceneData
 import com.github.damontecres.stashapp.api.fragment.StudioData
 import com.github.damontecres.stashapp.api.fragment.TagData
+import com.github.damontecres.stashapp.api.type.SortDirectionEnum
 import com.github.damontecres.stashapp.navigation.FilterAndPosition
 import com.github.damontecres.stashapp.proto.StashPreferences
 import com.github.damontecres.stashapp.proto.UpdatePreferences
+import com.github.damontecres.stashapp.data.DataType
+import com.github.damontecres.stashapp.data.SortAndDirection
+import com.github.damontecres.stashapp.data.SortOption
+import com.github.damontecres.stashapp.data.StashFindFilter
+import com.github.damontecres.stashapp.folders.data.NewItemRow
+import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.cards.StashCard
@@ -82,20 +90,19 @@ import com.github.damontecres.stashapp.ui.util.CrossFadeFactory
 import com.github.damontecres.stashapp.ui.util.OneTimeLaunchedEffect
 import com.github.damontecres.stashapp.ui.util.getPlayDestinationForItem
 import com.github.damontecres.stashapp.ui.util.ifElse
-import com.github.damontecres.stashapp.util.FilterParser
 import com.github.damontecres.stashapp.util.FrontPageParser
 import com.github.damontecres.stashapp.util.LoggingCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.UpdateChecker
-import com.github.damontecres.stashapp.util.getCaseInsensitive
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
-import com.github.damontecres.stashapp.util.launchDefault
 import com.github.damontecres.stashapp.util.launchIO
 import com.github.damontecres.stashapp.views.formatBytes
 import com.github.damontecres.stashapp.views.formatNumber
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -103,6 +110,7 @@ private const val TAG = "MainPage"
 
 class MainPageViewModel : ViewModel() {
     private lateinit var server: StashServer
+    private val folderDao = StashApplication.getDatabase().folderDao()
 
     val frontPageRows = mutableStateListOf<FrontPageParser.FrontPageRow.Success>()
 
@@ -115,34 +123,23 @@ class MainPageViewModel : ViewModel() {
         prefs: StashPreferences,
     ) {
         this.server = server
-        viewModelScope.launchDefault(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
-            val queryEngine = QueryEngine(server)
-            val filterParser = FilterParser(server.version)
-            val frontPageContent =
-                server.serverPreferences.uiConfiguration?.getCaseInsensitive("frontPageContent") as List<Map<String, *>>?
-            if (frontPageContent != null) {
-                Log.d(TAG, "${frontPageContent.size} front page rows")
-                val frontPageParser =
-                    FrontPageParser(
-                        context,
-                        queryEngine,
-                        filterParser,
-                        prefs.searchPreferences.maxResults,
+        viewModelScope.launch(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
+            val rowTitle = context.getString(R.string.home_newest_videos)
+            val newestRows =
+                withContext(Dispatchers.IO) {
+                    folderDao.newestSceneItems(
+                        serverUrl = server.url,
+                        limit = prefs.searchPreferences.maxResults,
                     )
-                val jobs = frontPageParser.parse(frontPageContent)
-
-                jobs.forEach { job ->
-                    try {
-                        job.await().let { row ->
-                            if (row is FrontPageParser.FrontPageRow.Success) {
-                                frontPageRows.add(row)
-                            }
-                        }
-                    } catch (ex: Exception) {
-                        Log.e(TAG, "Error fetching row data", ex)
-                    }
                 }
-            }
+            frontPageRows.clear()
+            frontPageRows.add(
+                FrontPageParser.FrontPageRow.Success(
+                    name = rowTitle,
+                    filter = homeNewestVideosFilter(rowTitle),
+                    data = newestRows.toHomeNewestScenes(),
+                ),
+            )
         }
     }
 
@@ -172,6 +169,62 @@ class MainPageViewModel : ViewModel() {
         }
     }
 }
+
+internal fun List<NewItemRow>.toHomeNewestScenes(): List<SlimSceneData> =
+    filter(NewItemRow::isScene).map(NewItemRow::toHomeNewestScene)
+
+private fun NewItemRow.toHomeNewestScene(): SlimSceneData =
+    SlimSceneData(
+        id = itemId,
+        title = homeNewestVideoTitle(),
+        code = null,
+        details = null,
+        director = null,
+        urls = emptyList(),
+        date = null,
+        rating100 = null,
+        play_count = null,
+        play_duration = null,
+        o_counter = null,
+        organized = false,
+        resume_time = null,
+        created_at = null,
+        updated_at = updatedAtEpochMs,
+        files = emptyList(),
+        paths =
+            SlimSceneData.Paths(
+                screenshot = thumbnailUrl,
+                preview = previewUrl,
+                stream = null,
+                sprite = null,
+                caption = null,
+            ),
+        scene_markers = emptyList(),
+        galleries = emptyList(),
+        studio = null,
+        groups = emptyList(),
+        tags = emptyList(),
+        performers = emptyList(),
+    )
+
+private fun NewItemRow.homeNewestVideoTitle(): String {
+    val trimmedTitle = title?.trim().orEmpty()
+    if (trimmedTitle.isNotEmpty()) return trimmedTitle
+    return path.substringAfterLast('/').substringBeforeLast('.').trim().ifEmpty { "Untitled" }
+}
+
+private fun homeNewestVideosFilter(name: String): FilterArgs =
+    FilterArgs(
+        dataType = DataType.SCENE,
+        name = name,
+        findFilter =
+            StashFindFilter(
+                SortAndDirection(
+                    SortOption.UpdatedAt,
+                    SortDirectionEnum.DESC,
+                ),
+            ),
+    )
 
 @Composable
 fun MainPage(

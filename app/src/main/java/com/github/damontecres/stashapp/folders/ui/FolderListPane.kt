@@ -1,31 +1,24 @@
 package com.github.damontecres.stashapp.folders.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -33,10 +26,6 @@ import androidx.tv.material3.Text
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import coil3.size.Precision
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.folders.data.FolderListRow
 import com.github.damontecres.stashapp.folders.data.FolderNode
@@ -72,7 +61,7 @@ fun FolderListPane(
 ) {
     val listState = rememberLazyListState()
     val showParent = currentPath != ROOT_PATH
-    val rowCount = folderRowCount(showParent, children.itemCount)
+    val rowCount = folderPaneRowCount(currentPath, children.itemCount)
 
     // Keep the focused row in view as the user navigates with the D-pad.
     LaunchedEffect(focusedRowIndex, rowCount) {
@@ -128,16 +117,21 @@ fun FolderListPane(
             verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.fillMaxHeight(),
         ) {
+            item(key = THIS_FOLDER_ROW_KEY) {
+                ThisFolderRow(
+                    isSelected = focusedRowIndex == 0,
+                )
+            }
             if (showParent) {
                 item(key = PARENT_ROW_KEY) {
-                    ParentRow(isSelected = focusedRowIndex == 0)
+                    ParentRow(isSelected = focusedRowIndex == 1)
                 }
             }
             items(
                 count = children.itemCount,
                 key = children.itemKey { it.node.path },
             ) { i ->
-                val rowIndex = (if (showParent) 1 else 0) + i
+                val rowIndex = 1 + (if (showParent) 1 else 0) + i
                 val row = children[i]
                 if (row == null) {
                     FolderPlaceholderRow(isSelected = focusedRowIndex == rowIndex)
@@ -238,6 +232,31 @@ private fun ParentRow(
     isSelected: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    UtilityFolderRow(
+        label = "..",
+        isSelected = isSelected,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun ThisFolderRow(
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    UtilityFolderRow(
+        label = stringResource(R.string.folders_this_folder),
+        isSelected = isSelected,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun UtilityFolderRow(
+    label: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val containerColor =
         if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
     val textColor =
@@ -251,9 +270,11 @@ private fun ParentRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "..",
+            text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -269,23 +290,14 @@ private fun FolderRow(
         if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
     val textColor =
         if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    val thumbnailModifier =
-        Modifier
-            .width(64.dp)
-            .aspectRatio(16f / 9f)
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
                 .background(containerColor)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FolderRowThumbnail(
-            row = row,
-            modifier = thumbnailModifier,
-        )
-        Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = node.name,
             style = MaterialTheme.typography.bodyMedium,
@@ -294,11 +306,12 @@ private fun FolderRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = true),
         )
-        if (node.recursiveCount > 0) {
+        if (canDrillIntoFolder(row)) {
             Text(
-                text = node.recursiveCount.toString(),
-                style = MaterialTheme.typography.labelSmall,
+                text = ">",
+                style = MaterialTheme.typography.bodyMedium,
                 color = textColor.copy(alpha = 0.7f),
+                modifier = Modifier.padding(start = 8.dp),
             )
         }
     }
@@ -326,39 +339,6 @@ private fun FolderPlaceholderRow(
     }
 }
 
-@Composable
-private fun FolderRowThumbnail(
-    row: FolderListRow,
-    modifier: Modifier = Modifier,
-) {
-    val context = LocalContext.current
-    val placeholder = painterResource(id = R.drawable.default_scene)
-    if (!row.thumbnailUrl.isNullOrBlank()) {
-        val request =
-            remember(row.thumbnailUrl) {
-                ImageRequest.Builder(context)
-                    .data(row.thumbnailUrl)
-                    .crossfade(false)
-                    .precision(Precision.INEXACT)
-                    .build()
-            }
-        AsyncImage(
-            model = request,
-            contentDescription = row.node.name,
-            modifier = modifier,
-            contentScale = ContentScale.Crop,
-            placeholder = placeholder,
-            error = placeholder,
-        )
-    } else {
-        Image(
-            painter = placeholder,
-            contentDescription = null,
-            modifier = modifier,
-            contentScale = ContentScale.Crop,
-        )
-    }
-}
-
 private const val ROOT_PATH = "/"
+private const val THIS_FOLDER_ROW_KEY = "__this_folder__"
 private const val PARENT_ROW_KEY = "__parent__"

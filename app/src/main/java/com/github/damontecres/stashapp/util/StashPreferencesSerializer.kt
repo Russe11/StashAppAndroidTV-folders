@@ -7,6 +7,7 @@ import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
 import com.github.damontecres.stashapp.proto.AdvancedPreferences
 import com.github.damontecres.stashapp.proto.CachePreferences
+import com.github.damontecres.stashapp.proto.FolderVideoSortPreference
 import com.github.damontecres.stashapp.proto.InterfacePreferences
 import com.github.damontecres.stashapp.proto.MpvPreferences
 import com.github.damontecres.stashapp.proto.PinPreferences
@@ -56,6 +57,7 @@ object StashPreferencesSerializer : Serializer<StashPreferences> {
                             videoPreviewAudio = StashPreference.PlayCardAudio.defaultValue
                             pageWithRemoteButtons = StashPreference.PageRemoteButtons.defaultValue
                             dpadSkipIndicator = StashPreference.DPadSkipIndicator.defaultValue
+                            folderVideoSort = FolderVideoSortPreference.FOLDER_VIDEO_SORT_NEWEST
                             tabPreferences =
                                 TabPreferences
                                     .newBuilder()

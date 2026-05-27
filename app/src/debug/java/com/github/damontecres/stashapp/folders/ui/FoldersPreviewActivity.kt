@@ -190,12 +190,12 @@ private fun FoldersPreviewScreen() {
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(16.dp),
                 ) {
-                    val sceneCount = tree.recursiveSceneCount(currentPath)
+                    val sceneCount = tree.directSceneCount(currentPath)
                     Text(
                         text =
                             "Right pane: scene grid for\n" +
                                 "$currentPath\n" +
-                                "($sceneCount scenes recursively)",
+                                "($sceneCount direct scenes)",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -215,6 +215,7 @@ private const val MOCK_SERVER = "mock://preview"
  */
 private class MockFolderTree {
     private val rowsByPath: Map<String, List<FolderListRow>>
+    private val directCountByPath: Map<String, Int>
     private val recursiveCountByPath: Map<String, Int>
 
     val currentPath: MutableStateFlow<String> = MutableStateFlow(ROOT)
@@ -305,6 +306,7 @@ private class MockFolderTree {
         }
 
         rowsByPath = rows
+        directCountByPath = direct
         recursiveCountByPath = recCount
     }
 
@@ -323,5 +325,5 @@ private class MockFolderTree {
         return true
     }
 
-    fun recursiveSceneCount(path: String): Int = recursiveCountByPath[path] ?: 0
+    fun directSceneCount(path: String): Int = directCountByPath[path] ?: 0
 }

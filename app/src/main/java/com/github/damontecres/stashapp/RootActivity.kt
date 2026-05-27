@@ -28,6 +28,7 @@ import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
 import com.github.damontecres.stashapp.navigation.NavigationManagerLeanback
 import com.github.damontecres.stashapp.util.KeyEventDispatcher
+import com.github.damontecres.stashapp.util.LocalDebugSetup
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.animateToInvisible
 import com.github.damontecres.stashapp.util.composeEnabled
@@ -228,11 +229,13 @@ class RootActivity :
         }
     }
 
-    private fun appHasPin(): Boolean =
-        PreferenceManager
+    private fun appHasPin(): Boolean {
+        if (LocalDebugSetup.disablePin) return false
+        return PreferenceManager
             .getDefaultSharedPreferences(this)
             .getString("pinCode", "")
             .isNotNullOrBlank()
+    }
 
     // Delegate key events to the current fragment
 

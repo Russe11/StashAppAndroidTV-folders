@@ -52,7 +52,12 @@ sealed class Destination(
     data object Main : Destination()
 
     @Serializable
-    data object Folders : Destination()
+    data class Folders(
+        val initialPath: String? = null,
+    ) : Destination()
+
+    @Serializable
+    data object New : Destination()
 
     @Serializable
     data class Settings(

@@ -15,6 +15,7 @@ import androidx.room.Embedded
 @Immutable
 data class FolderListRow(
     @Embedded val node: FolderNode,
+    val childFolderCount: Int = 0,
 ) {
     val thumbnailUrl: String?
         get() = node.thumbnailUrl

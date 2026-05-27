@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -25,8 +26,8 @@ import kotlinx.coroutines.flow.stateIn
  *
  * Per [docs/plans/stash-android-tv-folders-fork.md], the browser shows one folder
  * at a time: the left pane lists that folder's immediate subfolders (with a `..`
- * affordance pinned at the top when not at root); the right pane shows the
- * scenes recursively under it. Selecting a subfolder *replaces* the pane (no
+ * affordance pinned at the top when not at root); the right pane shows only the
+ * scenes directly inside it. Selecting a subfolder *replaces* the pane (no
  * column stack, no tree expansion); Back / `..` goes up one level.
  *
  * State is intentionally not persisted across process death; the UI is cheap
@@ -37,6 +38,9 @@ class FoldersViewModel : ViewModel() {
     private val dao = StashApplication.getDatabase().folderDao()
 
     private val _serverUrl = MutableStateFlow("")
+    private val _videoPanePath = MutableStateFlow(ROOT_PARENT)
+    private val _videoSort = MutableStateFlow(FolderVideoSort.Newest)
+    private var retainedState = FoldersPageRetainedState()
 
     /**
      * The folder the user is currently viewing. Always canonical (trailing
@@ -46,11 +50,68 @@ class FoldersViewModel : ViewModel() {
     private val _currentPath = MutableStateFlow(ROOT_PARENT)
     val currentPath: StateFlow<String> = _currentPath.asStateFlow()
 
-    fun bindServer(serverUrl: String) {
+    fun bindServer(
+        serverUrl: String,
+        initialPath: String? = null,
+    ) {
         if (_serverUrl.value != serverUrl) {
+            retainedState = retainedStatesByServer[serverUrl] ?: FoldersPageRetainedState()
             _serverUrl.value = serverUrl
             // New server: reset navigation so we don't carry over stale paths.
-            _currentPath.value = ROOT_PARENT
+            val restoredPath = initialPath ?: retainedState.currentPath
+            retainedState = retainedState.withCurrentPath(restoredPath)
+            _currentPath.value = retainedState.currentPath
+            persistRetainedState()
+        } else if (initialPath != null && _currentPath.value != initialPath) {
+            retainedState = retainedState.withCurrentPath(initialPath)
+            _currentPath.value = retainedState.currentPath
+            persistRetainedState()
+        }
+    }
+
+    fun setVideoPanePath(path: String) {
+        if (_videoPanePath.value != path) {
+            _videoPanePath.value = path
+        }
+    }
+
+    fun setVideoSort(sort: FolderVideoSort) {
+        if (_videoSort.value != sort) {
+            _videoSort.value = sort
+        }
+    }
+
+    fun rememberFolderFocus(
+        path: String,
+        focusedRowIndex: Int,
+    ) {
+        retainedState = retainedState.rememberFolderFocus(path, focusedRowIndex)
+        persistRetainedState()
+    }
+
+    fun restoreFolderFocus(path: String): Int = retainedState.restoreFolderFocus(path)
+
+    fun rememberVideoFocus(
+        path: String,
+        focusedRowIndex: Int,
+    ) {
+        retainedState = retainedState.rememberVideoFocus(path, focusedRowIndex)
+        persistRetainedState()
+    }
+
+    fun restoreVideoFocus(path: String): Int = retainedState.restoreVideoFocus(path)
+
+    internal fun rememberActivePane(pane: FoldersRetainedPane) {
+        retainedState = retainedState.rememberActivePane(pane)
+        persistRetainedState()
+    }
+
+    internal fun restoreActivePane(): FoldersRetainedPane = retainedState.activePane
+
+    private fun persistRetainedState() {
+        val server = _serverUrl.value
+        if (server.isNotBlank()) {
+            retainedStatesByServer[server] = retainedState
         }
     }
 
@@ -85,7 +146,9 @@ class FoldersViewModel : ViewModel() {
 
     /** Enter [folder]: the pane re-renders showing its children. */
     fun enterFolder(folder: FolderNode) {
-        _currentPath.value = folder.path
+        retainedState = retainedState.withCurrentPath(folder.path)
+        _currentPath.value = retainedState.currentPath
+        persistRetainedState()
     }
 
     /**
@@ -97,12 +160,14 @@ class FoldersViewModel : ViewModel() {
         val current = _currentPath.value
         val parent = parentOf(current)
         if (parent == current) return false
-        _currentPath.value = parent
+        retainedState = retainedState.withCurrentPath(parent)
+        _currentPath.value = retainedState.currentPath
+        persistRetainedState()
         return true
     }
 
     /**
-     * Paged scenes recursively under the currently-viewed folder. Re-keyed by
+     * Paged scenes directly inside the currently-viewed folder. Re-keyed by
      * both the server URL and the path so navigating restarts the page stream.
      */
     val scenesFlow: Flow<PagingData<FolderScene>> =
@@ -119,11 +184,35 @@ class FoldersViewModel : ViewModel() {
                                     enablePlaceholders = false,
                                 ),
                         ) {
-                            dao.observeScenesIn(server, path, tagIdFilter = null)
+                            dao.pagingScenesInFolder(server, path, tagIdFilter = null)
                         }.flow
                     }
                 }
             }.cachedIn(viewModelScope)
+
+    val videoScenesFlow: Flow<PagingData<FolderScene>> =
+        combine(_serverUrl, _videoPanePath, _videoSort) { server, path, sort ->
+            Triple(server, path, sort)
+        }.flatMapLatest { (server, path, sort) ->
+            if (server.isBlank()) {
+                flowOf(PagingData.empty())
+            } else {
+                Pager(
+                    config =
+                        PagingConfig(
+                            pageSize = PAGE_SIZE,
+                            enablePlaceholders = false,
+                        ),
+                ) {
+                    dao.pagingScenesInFolderSorted(
+                        serverUrl = server,
+                        parentPath = path,
+                        tagIdFilter = null,
+                        sort = sort.name,
+                    )
+                }.flow
+            }
+        }.cachedIn(viewModelScope)
 
     /**
      * Sync progress, kept hot so the top-bar chip reacts immediately. Reads
@@ -146,6 +235,8 @@ class FoldersViewModel : ViewModel() {
             )
 
     companion object {
+        private val retainedStatesByServer = mutableMapOf<String, FoldersPageRetainedState>()
+
         const val ROOT_PARENT = "/"
         private const val PAGE_SIZE = 60
         private const val CHILD_PAGE_SIZE = 80

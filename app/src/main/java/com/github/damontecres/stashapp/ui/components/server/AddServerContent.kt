@@ -51,6 +51,7 @@ import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.EditTextBox
 import com.github.damontecres.stashapp.ui.components.SwitchWithLabel
 import com.github.damontecres.stashapp.ui.tryRequestFocus
+import com.github.damontecres.stashapp.util.LocalDebugSetup
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashPreferencesSerializer
 import com.github.damontecres.stashapp.util.StashServer
@@ -61,6 +62,7 @@ import com.github.damontecres.stashapp.util.updateAdvancedPreferences
 import kotlinx.coroutines.launch
 
 private const val TAG = "AddServer"
+internal const val USE_USERNAME_BY_DEFAULT = true
 
 @Composable
 fun AddServer(
@@ -73,12 +75,15 @@ fun AddServer(
     val preferences by context.preferences.data.collectAsState(StashPreferencesSerializer.defaultValue)
 
     val testButtonFocusRequester = remember { FocusRequester() }
+    val localDebugCredentials = remember { LocalDebugSetup.credentials }
 
-    var serverUrl by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var apiKey by remember { mutableStateOf<String?>(null) }
+    var serverUrl by remember { mutableStateOf(localDebugCredentials?.serverUrl.orEmpty()) }
+    var username by remember { mutableStateOf(localDebugCredentials?.username.orEmpty()) }
+    var apiKey by remember { mutableStateOf(localDebugCredentials?.password) }
     var showApiKey by remember { mutableStateOf(false) }
-    var usePassword by remember { mutableStateOf(false) }
+    var usePassword by remember {
+        mutableStateOf(localDebugCredentials != null || USE_USERNAME_BY_DEFAULT)
+    }
 
     var trustCerts by remember {
         mutableStateOf(preferences.advancedPreferences.trustSelfSignedCertificates)
@@ -87,9 +92,23 @@ fun AddServer(
     val connectionState by viewModel.connectionState.observeAsState(ConnectionState.Inactive)
 
     var showTrustDialog by remember { mutableStateOf(false) }
+    var localDebugAutoSetupStarted by remember { mutableStateOf(false) }
 
     LaunchedEffect(serverUrl, apiKey, trustCerts, username) {
         viewModel.clearConnectionStatus()
+    }
+    LaunchedEffect(localDebugCredentials, trustCerts) {
+        val credentials = localDebugCredentials
+        if (credentials != null && !localDebugAutoSetupStarted) {
+            localDebugAutoSetupStarted = true
+            viewModel.testServer(
+                credentials.serverUrl,
+                credentials.password,
+                trustCerts,
+                credentials.username,
+                useUsername = true,
+            )
+        }
     }
     LaunchedEffect(connectionState) {
         connectionState.let {
@@ -366,6 +385,9 @@ fun AddServer(
                     }
                 }
                 trustCerts = true
+                if (localDebugCredentials != null) {
+                    localDebugAutoSetupStarted = false
+                }
             },
         )
     }

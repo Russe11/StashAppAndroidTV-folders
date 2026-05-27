@@ -19,6 +19,10 @@ val localKeystoreProps: Properties? =
     rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
         Properties().apply { f.inputStream().use { stream -> load(stream) } }
     }
+val localProps: Properties? =
+    rootProject.file("local.properties").takeIf { it.exists() }?.let { f ->
+        Properties().apply { f.inputStream().use { stream -> load(stream) } }
+    }
 val hasLocalSigning: Boolean = localKeystoreProps != null
 val ffmpegModuleExists =
     providers.provider { project.file("libs/lib-decoder-ffmpeg-release.aar").exists() }
@@ -28,6 +32,35 @@ val mpvModuleExists =
     providers.provider { project.file("libs/wholphin-mpv-release.aar").exists() }
 val extensionsRepoActive =
     providers.provider { project.hasProperty("WholphinExtensionsUsername") }
+
+fun localProperty(
+    name: String,
+    trim: Boolean = true,
+): String {
+    val value = localProps?.getProperty(name).orEmpty()
+    return if (trim) value.trim() else value
+}
+
+fun String.asBuildConfigString(): String =
+    "\"" +
+        replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n") +
+        "\""
+
+val debugStashUrl = localProperty("stash.debug.url")
+val debugStashUsername = localProperty("stash.debug.username")
+val debugStashPassword = localProperty("stash.debug.password", trim = false)
+val debugLocalServerAutoSetup =
+    debugStashUrl.isNotBlank() &&
+        debugStashUsername.isNotBlank() &&
+        debugStashPassword.isNotBlank()
+val debugLocalServerNoPin =
+    debugLocalServerAutoSetup &&
+        localProperty("stash.debug.noPin")
+            .ifBlank { "true" }
+            .toBooleanStrictOrNull()
+            .let { it ?: true }
 
 plugins {
     alias(libs.plugins.android.application)
@@ -121,6 +154,11 @@ configure<ApplicationExtension> {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            buildConfigField("boolean", "DEBUG_LOCAL_SERVER_AUTO_SETUP", "false")
+            buildConfigField("String", "DEBUG_STASH_URL", "\"\"")
+            buildConfigField("String", "DEBUG_STASH_USERNAME", "\"\"")
+            buildConfigField("String", "DEBUG_STASH_PASSWORD", "\"\"")
+            buildConfigField("boolean", "DEBUG_LOCAL_SERVER_NO_PIN", "false")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -137,6 +175,23 @@ configure<ApplicationExtension> {
             isMinifyEnabled = false
             isDebuggable = true
             applicationIdSuffix = ".debug"
+            buildConfigField(
+                "boolean",
+                "DEBUG_LOCAL_SERVER_AUTO_SETUP",
+                debugLocalServerAutoSetup.toString(),
+            )
+            buildConfigField("String", "DEBUG_STASH_URL", debugStashUrl.asBuildConfigString())
+            buildConfigField(
+                "String",
+                "DEBUG_STASH_USERNAME",
+                debugStashUsername.asBuildConfigString(),
+            )
+            buildConfigField(
+                "String",
+                "DEBUG_STASH_PASSWORD",
+                debugStashPassword.asBuildConfigString(),
+            )
+            buildConfigField("boolean", "DEBUG_LOCAL_SERVER_NO_PIN", debugLocalServerNoPin.toString())
             if (shouldSign.get()) {
                 signingConfig = signingConfigs.getByName("ci")
             }

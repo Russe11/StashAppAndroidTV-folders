@@ -67,7 +67,7 @@ fun FolderSceneGrid(
 
             else -> {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 220.dp),
+                    columns = GridCells.Fixed(3),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(16.dp),

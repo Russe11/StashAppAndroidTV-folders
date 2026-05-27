@@ -21,6 +21,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -51,8 +56,26 @@ fun PlayButtons(
     alwaysStartFromBeginning: Boolean,
     showEditButton: Boolean,
     modifier: Modifier = Modifier,
+    onFirstButtonLeft: (() -> Unit)? = null,
+    showMoreButton: Boolean = true,
 ) {
     val firstFocus = remember { FocusRequester() }
+    val firstButtonModifier =
+        Modifier
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    onFirstButtonLeft != null &&
+                    shouldExitDetailsFromFirstButton(isFirstButtonFocused = true, key = event.key)
+                ) {
+                    onFirstButtonLeft.invoke()
+                    true
+                } else {
+                    false
+                }
+            }
+            .onFocusChanged(buttonOnFocusChanged)
+            .focusRequester(firstFocus)
+            .focusRequester(focusRequester)
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(8.dp),
@@ -70,10 +93,7 @@ fun PlayButtons(
                     Icons.Default.PlayArrow,
                     PlaybackMode.Choose,
                     playOnClick,
-                    Modifier
-                        .onFocusChanged(buttonOnFocusChanged)
-                        .focusRequester(firstFocus)
-                        .focusRequester(focusRequester),
+                    firstButtonModifier,
                 )
             }
             item {
@@ -96,10 +116,7 @@ fun PlayButtons(
                     Icons.Default.PlayArrow,
                     PlaybackMode.Choose,
                     playOnClick,
-                    Modifier
-                        .onFocusChanged(buttonOnFocusChanged)
-                        .focusRequester(firstFocus)
-                        .focusRequester(focusRequester),
+                    firstButtonModifier,
                 )
             }
         }
@@ -126,29 +143,35 @@ fun PlayButtons(
             }
         }
 
-        // More button
-        item {
-            Button(
-                onClick = moreOnClick,
-                onLongClick = {},
-                modifier =
-                    Modifier
-                        .onFocusChanged(buttonOnFocusChanged),
-                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = null,
-                )
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    text = stringResource(R.string.more),
-                    style = MaterialTheme.typography.titleSmall,
-                )
+        if (showMoreButton) {
+            item {
+                Button(
+                    onClick = moreOnClick,
+                    onLongClick = {},
+                    modifier =
+                        Modifier
+                            .onFocusChanged(buttonOnFocusChanged),
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        text = stringResource(R.string.more),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                }
             }
         }
     }
 }
+
+internal fun shouldExitDetailsFromFirstButton(
+    isFirstButtonFocused: Boolean,
+    key: Key,
+): Boolean = isFirstButtonFocused && key == Key.DirectionLeft
 
 @Composable
 fun PlayButton(

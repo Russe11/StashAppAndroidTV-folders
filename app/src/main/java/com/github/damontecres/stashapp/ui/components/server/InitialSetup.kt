@@ -26,6 +26,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.util.ScreenSize
 import com.github.damontecres.stashapp.ui.util.screenSize
+import com.github.damontecres.stashapp.util.LocalDebugSetup
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.preferences
@@ -51,34 +52,35 @@ fun InitialSetup(
 
     val serverConnection by serverViewModel.serverConnection.observeAsState()
 
-    fun submit(pin: String) {
-        server?.let { newServer ->
-            viewModel.addServerAsCurrent(newServer)
-            scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
-                try {
-                    context.preferences.updateData {
-                        it
-                            .updatePinPreferences {
-                                this.pin = pin
-                                autoSubmit = true
-                            }.updateInterfacePreferences {
-                                if (isNotTvDevice) {
-                                    // Adjust some settings for a better touch device experience
-                                    // Remove the jump buttons
-                                    showGridJumpButtons = false
-                                    // If its a larger device, use larger cards
-                                    if (screenSize == ScreenSize.EXPANDED) {
-                                        cardSize = 4
-                                    }
+    fun submit(
+        newServer: StashServer,
+        pin: String,
+    ) {
+        viewModel.addServerAsCurrent(newServer)
+        scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+            try {
+                context.preferences.updateData {
+                    it
+                        .updatePinPreferences {
+                            this.pin = pin
+                            autoSubmit = true
+                        }.updateInterfacePreferences {
+                            if (isNotTvDevice) {
+                                // Adjust some settings for a better touch device experience
+                                // Remove the jump buttons
+                                showGridJumpButtons = false
+                                // If its a larger device, use larger cards
+                                if (screenSize == ScreenSize.EXPANDED) {
+                                    cardSize = 4
                                 }
                             }
-                    }
-                } catch (ex: Exception) {
-                    Log.e("InitialSetup", "Error saving pin", ex)
-                    showToastOnMain(context, "Error saving pin", Toast.LENGTH_LONG)
+                        }
                 }
-                serverViewModel.switchServer(newServer)
+            } catch (ex: Exception) {
+                Log.e("InitialSetup", "Error saving pin", ex)
+                showToastOnMain(context, "Error saving pin", Toast.LENGTH_LONG)
             }
+            serverViewModel.switchServer(newServer)
         }
     }
 
@@ -90,7 +92,11 @@ fun InitialSetup(
             AddServer(
                 onSubmit = {
                     server = it
-                    showPinDialog = true
+                    if (LocalDebugSetup.disablePin) {
+                        submit(it, "")
+                    } else {
+                        showPinDialog = true
+                    }
                 },
                 modifier = Modifier,
             )
@@ -116,8 +122,16 @@ fun InitialSetup(
                 ),
         ) {
             ConfigurePin(
-                onCancel = { submit("") },
-                onSubmit = { submit(it) },
+                onCancel = {
+                    server?.let {
+                        submit(it, "")
+                    }
+                },
+                onSubmit = { pin ->
+                    server?.let {
+                        submit(it, pin)
+                    }
+                },
                 modifier =
                     Modifier
                         .background(

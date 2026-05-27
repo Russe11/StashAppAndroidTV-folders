@@ -456,9 +456,9 @@ class LibraryIndexer(
          * (e.g. `/mnt/movies/Foo/scene.mp4`) is returned regardless of whether
          * the source string included one.
          *
-         * The leading-slash guarantee is what keeps the folder browser query
-         * (`path LIKE :pathPrefix || '%'`) and the canonical [parentPathOf]
-         * output (always `/`-prefixed) in lockstep. Stash returns some paths
+         * The leading-slash guarantee is what keeps the stored file [path]
+         * and the canonical [parentPathOf] output (always `/`-prefixed) in
+         * lockstep. Stash returns some paths
          * without a leading `/` (e.g. `prv/docs/foo.mp4`), and if we faithfully
          * stored those they'd never match a prefix derived from the folders
          * table — which is how the bug manifested before this fix.

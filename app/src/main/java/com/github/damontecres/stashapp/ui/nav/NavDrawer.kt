@@ -91,6 +91,9 @@ fun NavDrawer(
     BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination == Destination.Main)) {
         openDrawer()
     }
+    BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination != Destination.Main)) {
+        navigationManager.goBack()
+    }
 
     val serverUrlInteractionSource = remember { MutableInteractionSource() }
     val serverFocused = serverUrlInteractionSource.collectIsFocusedAsState().value

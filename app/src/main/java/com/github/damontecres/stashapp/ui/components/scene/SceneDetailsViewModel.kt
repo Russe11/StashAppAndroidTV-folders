@@ -35,6 +35,7 @@ import com.github.damontecres.stashapp.util.asMarkerData
 import com.github.damontecres.stashapp.util.createSceneSuggestionFilter
 import com.github.damontecres.stashapp.util.showSetRatingToast
 import com.github.damontecres.stashapp.util.toLongMilliseconds
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class SceneDetailsViewModel(
@@ -64,44 +65,56 @@ class SceneDetailsViewModel(
 
     val rating100 = MutableLiveData(0)
     val oCount = MutableLiveData(0)
+    private val loadGate = SceneDetailsLoadGate()
 
     fun init(): SceneDetailsViewModel {
-        viewModelScope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
-            try {
-                val scene = queryEngine.getScene(sceneId)
-                if (scene != null) {
-                    rating100.value = scene.rating100 ?: 0
-                    oCount.value = scene.o_counter ?: 0
-                    tags.value = scene.tags.map { it.tagData }
-                    groups.value = scene.groups.map { it.group.groupData }
-                    markers.value = scene.scene_markers.map { it.asMarkerData(scene) }
-                    studio.value = scene.studio?.studioData
-                    this@SceneDetailsViewModel.scene = scene
-
-                    loadingState.value = SceneLoadingState.Success(scene)
-                    if (scene.performers.isNotEmpty()) {
-                        performers.value =
-                            queryEngine.findPerformers(performerIds = scene.performers.map { it.id })
-                    }
-                    if (scene.galleries.isNotEmpty()) {
-                        galleries.value = queryEngine.getGalleries(scene.galleries.map { it.id })
-                    }
-                    if (!suggestions.isInitialized || suggestions.value?.isEmpty() == true) {
-                        refreshSuggestions()
-                    }
-                } else {
-                    loadingState.value = SceneLoadingState.Error
-                }
-            } catch (ex: Exception) {
-                loadingState.value = SceneLoadingState.Error
-                LoggingCoroutineExceptionHandler(
-                    server,
-                    viewModelScope,
-                    toastMessage = "Error loading scene",
-                ).handleException(ex)
+        loadGate.start {
+            viewModelScope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                loadScene()
             }
         }
         return this
+    }
+
+    fun cancelLoading() {
+        loadGate.cancel()
+    }
+
+    private suspend fun loadScene() {
+        try {
+            val scene = queryEngine.getScene(sceneId)
+            if (scene != null) {
+                rating100.value = scene.rating100 ?: 0
+                oCount.value = scene.o_counter ?: 0
+                tags.value = scene.tags.map { it.tagData }
+                groups.value = scene.groups.map { it.group.groupData }
+                markers.value = scene.scene_markers.map { it.asMarkerData(scene) }
+                studio.value = scene.studio?.studioData
+                this@SceneDetailsViewModel.scene = scene
+                loadGate.markLoaded()
+
+                loadingState.value = SceneLoadingState.Success(scene)
+                if (scene.performers.isNotEmpty()) {
+                    performers.value =
+                        queryEngine.findPerformers(performerIds = scene.performers.map { it.id })
+                }
+                if (scene.galleries.isNotEmpty()) {
+                    galleries.value = queryEngine.getGalleries(scene.galleries.map { it.id })
+                }
+                if (!suggestions.isInitialized || suggestions.value?.isEmpty() == true) {
+                    refreshSuggestions()
+                }
+            } else {
+                loadingState.value = SceneLoadingState.Error
+            }
+        } catch (ex: Exception) {
+            loadingState.value = SceneLoadingState.Error
+            LoggingCoroutineExceptionHandler(
+                server,
+                viewModelScope,
+                toastMessage = "Error loading scene",
+            ).handleException(ex)
+        }
     }
 
     private fun refreshSuggestions() {
@@ -345,6 +358,29 @@ sealed class SceneLoadingState {
     data class Success(
         val scene: FullSceneData,
     ) : SceneLoadingState()
+}
+
+internal class SceneDetailsLoadGate {
+    private var activeLoad: Job? = null
+    private var loaded = false
+
+    fun start(startLoad: () -> Job): Job? {
+        if (loaded || activeLoad?.isActive == true) {
+            return null
+        }
+        return startLoad().also {
+            activeLoad = it
+        }
+    }
+
+    fun markLoaded() {
+        loaded = true
+    }
+
+    fun cancel() {
+        activeLoad?.cancel()
+        activeLoad = null
+    }
 }
 
 enum class AddRemove {

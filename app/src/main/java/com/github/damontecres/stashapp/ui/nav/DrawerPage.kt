@@ -38,6 +38,15 @@ sealed interface DrawerPage : Parcelable {
     }
 
     @Parcelize
+    data object NewPage : DrawerPage {
+        @IgnoredOnParcel
+        override val iconString = R.string.fa_clock
+
+        @IgnoredOnParcel
+        override val name = R.string.new_items
+    }
+
+    @Parcelize
     data object SettingPage : DrawerPage {
         // Unused
         @IgnoredOnParcel
