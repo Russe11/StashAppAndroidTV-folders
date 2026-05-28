@@ -152,8 +152,8 @@ configure<ApplicationExtension> {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             buildConfigField("boolean", "DEBUG_LOCAL_SERVER_AUTO_SETUP", "false")
             buildConfigField("String", "DEBUG_STASH_URL", "\"\"")
             buildConfigField("String", "DEBUG_STASH_USERNAME", "\"\"")
