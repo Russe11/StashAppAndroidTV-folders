@@ -12,6 +12,7 @@ import com.github.damontecres.stashapp.api.fragment.GalleryData
 import com.github.damontecres.stashapp.api.fragment.GroupData
 import com.github.damontecres.stashapp.api.fragment.GroupRelationshipData
 import com.github.damontecres.stashapp.api.fragment.ImageData
+import com.github.damontecres.stashapp.api.fragment.FolderSceneData
 import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.MinimalSceneData
 import com.github.damontecres.stashapp.api.fragment.PerformerData
@@ -231,7 +232,7 @@ sealed class Destination(
 
         fun getDataType(item: StashData): DataType =
             when (item) {
-                is SlimSceneData, is FullSceneData, is VideoSceneData, is MinimalSceneData -> DataType.SCENE
+                is SlimSceneData, is FullSceneData, is VideoSceneData, is MinimalSceneData, is FolderSceneData -> DataType.SCENE
                 is PerformerData, is SlimPerformerData -> DataType.PERFORMER
                 is TagData, is SlimTagData -> DataType.TAG
                 is GroupData, is GroupRelationshipData -> DataType.GROUP

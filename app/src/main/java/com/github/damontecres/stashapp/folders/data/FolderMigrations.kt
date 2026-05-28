@@ -13,15 +13,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * source of truth. If you edit an entity, regenerate the schema by running
  * `./gradlew :app:assembleDebug` and update these statements to match.
  *
- * WIRING REQUIRED: this migration must be passed to the database builder in
- * `StashApplication.kt`, alongside the existing `MIGRATION_4_TO_5`:
- *
- *     .addMigrations(MIGRATION_4_TO_5, MIGRATION_5_TO_6)
- *
- * Without that line, the v5→v6 bump will fall through to
- * `fallbackToDestructiveMigration()` and users will lose their recent searches and
- * playback effects on upgrade. This file was kept strict-additive on purpose; the
- * one-line edit to `StashApplication.kt` is owned by the sync-engine wiring task.
+ * All Folders migrations are wired into the database builder in `StashApplication.kt`
+ * via `.addMigrations(...)`. Keep that list in sync when adding a migration here,
+ * otherwise the version bump falls through to `fallbackToDestructiveMigration()` and
+ * users lose recent searches and playback effects on upgrade.
  */
 val MIGRATION_5_TO_6 =
     object : Migration(5, 6) {
@@ -147,5 +142,32 @@ val MIGRATION_8_TO_9 =
                     "WHERE s.`serverUrl` = `folders`.`serverUrl` AND s.`parentPath` = `folders`.`path` " +
                     "ORDER BY s.`updatedAtEpochMs` DESC, s.`path` COLLATE NOCASE ASC LIMIT 1)",
             )
+        }
+    }
+
+/**
+ * Indexes the New feed's recency sort and prunes redundant single-column indexes.
+ *
+ *   - Adds `folder_scenes(serverUrl, updatedAtEpochMs)`: the New feed's scene arm
+ *     sorts by `updatedAtEpochMs DESC` within a server. Without this index SQLite
+ *     materialises and sorts the whole scene table on each page load.
+ *   - Drops the bare `folder_scenes(path)`, `folder_scenes(parentPath)` and
+ *     `folders(parentPath)` indexes. Every query that touches those columns also
+ *     filters by `serverUrl`, so the `serverUrl`-prefixed composite indexes already
+ *     cover them; the bare indexes only added maintenance cost to each sync upsert.
+ *
+ * The CREATE/DROP set here must produce exactly the index set Room derives from the
+ * v10 @Entity classes (see `app/schemas/...AppDatabase/10.json`).
+ */
+val MIGRATION_9_TO_10 =
+    object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_updatedAtEpochMs` " +
+                    "ON `folder_scenes` (`serverUrl`, `updatedAtEpochMs`)",
+            )
+            db.execSQL("DROP INDEX IF EXISTS `index_folder_scenes_path`")
+            db.execSQL("DROP INDEX IF EXISTS `index_folder_scenes_parentPath`")
+            db.execSQL("DROP INDEX IF EXISTS `index_folders_parentPath`")
         }
     }

@@ -9,6 +9,7 @@ import com.github.damontecres.stashapp.data.room.AppDatabase
 import com.github.damontecres.stashapp.data.room.MIGRATION_4_TO_5
 import com.github.damontecres.stashapp.folders.data.MIGRATION_7_TO_8
 import com.github.damontecres.stashapp.folders.data.MIGRATION_8_TO_9
+import com.github.damontecres.stashapp.folders.data.MIGRATION_9_TO_10
 import org.junit.Assert
 import org.junit.Rule
 import org.junit.Test
@@ -135,6 +136,42 @@ class TestDbMigrations {
             c.moveToFirst()
             Assert.assertEquals(12345L, c.getLong(0))
             Assert.assertEquals("direct-thumb.jpg", c.getString(1))
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate9To10_reindexesNewFeedAndKeepsData() {
+        helper.createDatabase(testDbName, 9).apply {
+            execSQL(
+                "INSERT INTO folder_scenes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                arrayOf<Any?>(
+                    "https://server",
+                    "123",
+                    "/Movies/newest.mp4",
+                    "/Movies/",
+                    "Newest",
+                    null,
+                    null,
+                    0,
+                    "direct-thumb.jpg",
+                    null,
+                    "[]",
+                    12345L,
+                ),
+            )
+            close()
+        }
+
+        // runMigrationsAndValidate asserts the resulting schema (including the new
+        // serverUrl+updatedAtEpochMs index and the three dropped single-column
+        // indexes) matches the generated 10.json.
+        val db = helper.runMigrationsAndValidate(testDbName, 10, true, MIGRATION_9_TO_10)
+
+        db.query("SELECT sceneId, updatedAtEpochMs FROM folder_scenes WHERE serverUrl = ?", arrayOf("https://server")).useCursor { c ->
+            c.moveToFirst()
+            Assert.assertEquals("123", c.getString(0))
+            Assert.assertEquals(12345L, c.getLong(1))
         }
     }
 }

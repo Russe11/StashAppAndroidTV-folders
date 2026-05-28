@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -166,53 +167,30 @@ class FoldersViewModel : ViewModel() {
         return true
     }
 
-    /**
-     * Paged scenes directly inside the currently-viewed folder. Re-keyed by
-     * both the server URL and the path so navigating restarts the page stream.
-     */
-    val scenesFlow: Flow<PagingData<FolderScene>> =
-        _serverUrl
-            .flatMapLatest { server ->
-                _currentPath.flatMapLatest { path ->
-                    if (server.isBlank()) {
-                        flowOf(PagingData.empty())
-                    } else {
-                        Pager(
-                            config =
-                                PagingConfig(
-                                    pageSize = PAGE_SIZE,
-                                    enablePlaceholders = false,
-                                ),
-                        ) {
-                            dao.pagingScenesInFolder(server, path, tagIdFilter = null)
-                        }.flow
-                    }
-                }
-            }.cachedIn(viewModelScope)
-
     val videoScenesFlow: Flow<PagingData<FolderScene>> =
         combine(_serverUrl, _videoPanePath, _videoSort) { server, path, sort ->
             Triple(server, path, sort)
-        }.flatMapLatest { (server, path, sort) ->
-            if (server.isBlank()) {
-                flowOf(PagingData.empty())
-            } else {
-                Pager(
-                    config =
-                        PagingConfig(
-                            pageSize = PAGE_SIZE,
-                            enablePlaceholders = false,
-                        ),
-                ) {
-                    dao.pagingScenesInFolderSorted(
-                        serverUrl = server,
-                        parentPath = path,
-                        tagIdFilter = null,
-                        sort = sort.name,
-                    )
-                }.flow
-            }
-        }.cachedIn(viewModelScope)
+        }.distinctUntilChanged()
+            .flatMapLatest { (server, path, sort) ->
+                if (server.isBlank()) {
+                    flowOf(PagingData.empty())
+                } else {
+                    Pager(
+                        config =
+                            PagingConfig(
+                                pageSize = PAGE_SIZE,
+                                enablePlaceholders = false,
+                            ),
+                    ) {
+                        dao.pagingScenesInFolderSorted(
+                            serverUrl = server,
+                            parentPath = path,
+                            tagIdFilter = null,
+                            sort = sort.name,
+                        )
+                    }.flow
+                }
+            }.cachedIn(viewModelScope)
 
     /**
      * Sync progress, kept hot so the top-bar chip reacts immediately. Reads

@@ -118,6 +118,10 @@ configure<ApplicationExtension> {
         versionCode = gitTags.trim().lines().size
         versionName = gitDescribe.trim().removePrefix("v").ifBlank { "0.0.0" }
         vectorDrawables.useSupportLibrary = true
+        // TV boxes are ARM; keep the universal APK from bundling x86/x86_64 .so files.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
     signingConfigs {
         if (shouldSign.get()) {
@@ -388,8 +392,6 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.coil.network.cachecontrol)
-    implementation(libs.coil.svg)
-    implementation(libs.coil.gif)
     implementation(libs.navigation.reimagined)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.restring)

@@ -27,12 +27,14 @@ import androidx.room.Index
     // each other.
     primaryKeys = ["serverUrl", "sceneId"],
     indices = [
-        Index(value = ["path"]),
-        Index(value = ["parentPath"]),
         Index(value = ["serverUrl", "parentPath"]),
         // Speeds up server-scoped path scans such as the sync rebuild's
         // `WHERE serverUrl = ? ORDER BY path` query shape.
         Index(value = ["serverUrl", "path"]),
+        // The New feed sorts scenes by recency within a server; this lets the
+        // scene arm of the feed's UNION walk the index instead of sorting the
+        // whole scene table.
+        Index(value = ["serverUrl", "updatedAtEpochMs"]),
     ],
 )
 // @Immutable lets Compose skip recomposition of any composable that takes a

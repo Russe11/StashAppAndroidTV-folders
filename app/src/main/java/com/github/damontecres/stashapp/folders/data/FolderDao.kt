@@ -53,6 +53,22 @@ interface FolderDao {
     }
 
     /**
+     * Atomically replace the materialised folder tree for a server: drop the stale
+     * rows and upsert the freshly-computed set in one transaction so the Folders UI
+     * never observes a transient empty folder table mid-rebuild.
+     */
+    @androidx.room.Transaction
+    suspend fun replaceFolders(
+        serverUrl: String,
+        folders: List<FolderNode>,
+    ) {
+        deleteFoldersForServer(serverUrl)
+        if (folders.isNotEmpty()) {
+            upsertFolders(folders)
+        }
+    }
+
+    /**
      * Paged children for TV navigation. [includeThumbnails] deliberately gates the
      * materialised thumbnail column so the top of very wide folder trees can skip
      * image loading without paying any recursive scene lookup cost while browsing.

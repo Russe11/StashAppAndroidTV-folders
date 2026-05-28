@@ -48,6 +48,7 @@ import com.github.damontecres.stashapp.api.fragment.GalleryData
 import com.github.damontecres.stashapp.api.fragment.GroupData
 import com.github.damontecres.stashapp.api.fragment.GroupRelationshipData
 import com.github.damontecres.stashapp.api.fragment.ImageData
+import com.github.damontecres.stashapp.api.fragment.FolderSceneData
 import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.MinimalSceneData
 import com.github.damontecres.stashapp.api.fragment.PerformerData
@@ -200,7 +201,7 @@ fun SceneDetailsPage(
                         is MarkerData -> viewModel.addMarker(item)
                         is FullMarkerData -> throw UnsupportedOperationException()
                         is ImageData, is ExtraImageData, is SlimImageData -> throw UnsupportedOperationException()
-                        is SlimSceneData, is FullSceneData, is VideoSceneData, is MinimalSceneData -> throw UnsupportedOperationException()
+                        is SlimSceneData, is FullSceneData, is VideoSceneData, is MinimalSceneData, is FolderSceneData -> throw UnsupportedOperationException()
                     }
                 },
                 removeItem = { item ->
@@ -212,7 +213,7 @@ fun SceneDetailsPage(
                         is StudioData -> viewModel.removeStudio()
                         is MarkerData, is FullMarkerData -> viewModel.removeMarker(item.id)
                         is ImageData, is ExtraImageData, is SlimImageData -> throw UnsupportedOperationException()
-                        is SlimSceneData, is FullSceneData, is VideoSceneData, is MinimalSceneData -> throw UnsupportedOperationException()
+                        is SlimSceneData, is FullSceneData, is VideoSceneData, is MinimalSceneData, is FolderSceneData -> throw UnsupportedOperationException()
                     }
                 },
                 oCountAction = viewModel::updateOCount,

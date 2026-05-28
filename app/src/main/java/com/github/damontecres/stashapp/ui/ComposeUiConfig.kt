@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.ui
 
+import androidx.compose.runtime.Immutable
 import com.github.damontecres.stashapp.proto.StashPreferences
 import com.github.damontecres.stashapp.ui.components.StarRatingPrecision
 import com.github.damontecres.stashapp.util.ServerPreferences
@@ -8,6 +9,11 @@ import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import com.github.damontecres.stashapp.views.models.CardUiSettings
 import com.github.damontecres.stashapp.views.models.ServerViewModel.Companion.cardSettings
 
+// Threaded through ~85 composable signatures; a fresh instance is built via
+// [fromStashServer] whenever prefs change, so the proto field it wraps never mutates
+// in place. Marking it @Immutable lets Compose skip recomposition when the same
+// instance flows down, instead of treating the unstable proto as a recomposition trigger.
+@Immutable
 data class ComposeUiConfig(
     val preferences: StashPreferences,
     val ratingAsStars: Boolean,

@@ -101,10 +101,8 @@ apollo-runtime = { module = "com.apollographql.apollo:apollo-runtime", version.r
 auto-service = { module = "com.google.auto.service:auto-service", version.ref = "auto-service" }
 auto-service-annotations = { module = "com.google.auto.service:auto-service-annotations", version.ref = "auto-service" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil-compose" }
-coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil-compose" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil-compose" }
 coil-network-cachecontrol = { module = "io.coil-kt.coil3:coil-network-cache-control", version.ref = "coil-compose" }
-coil-svg = { module = "io.coil-kt.coil3:coil-svg", version.ref = "coil-compose" }
 compose-wheel-picker = { module = "com.github.zj565061763:compose-wheel-picker", version.ref = "compose-wheel-picker" }
 desugar_jdk_libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar_jdk_libs" }
 markwon-core = { module = "io.noties.markwon:core", version.ref = "markwon-core" }

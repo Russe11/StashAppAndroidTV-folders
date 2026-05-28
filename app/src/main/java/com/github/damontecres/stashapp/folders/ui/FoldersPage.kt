@@ -50,6 +50,8 @@ import com.github.damontecres.stashapp.folders.data.FolderScene
 import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.compat.Button
+import com.github.damontecres.stashapp.ui.components.DialogItem
+import com.github.damontecres.stashapp.ui.components.DialogPopup
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.LongClicker
 import com.github.damontecres.stashapp.util.StashServer
@@ -116,6 +118,7 @@ fun FoldersPage(
     var paneFocus by remember { mutableStateOf(viewModel.restoreActivePane().toPaneFocus()) }
     var paneBeforeSort by remember { mutableStateOf(FoldersPaneFocus.Folder) }
     var detailsFocusRequest by remember { mutableIntStateOf(0) }
+    var showResyncConfirm by remember { mutableStateOf(false) }
 
     fun setPaneFocus(focus: FoldersPaneFocus) {
         paneFocus = focus
@@ -154,6 +157,7 @@ fun FoldersPage(
     val selectedVideo = videoItems.itemAtOrNull(focusedVideoIndex)
     val rootFocus = remember { FocusRequester() }
     val sortFocus = remember { FocusRequester() }
+    val resyncFocus = remember { FocusRequester() }
     var rootFocusReclaimSignal by remember { mutableIntStateOf(0) }
     var allowingNavigationDrawerFocusTransfer by remember { mutableStateOf(false) }
 
@@ -178,8 +182,24 @@ fun FoldersPage(
         onOpenNavigationDrawer()
     }
 
-    BackHandler(enabled = !navigationDrawerOpen) {
-        openNavigationDrawerFromFolders()
+    // Back backs out of the Details/Sort panes, then climbs the folder tree, and
+    // only when already at the root folder defers to the nav drawer's own Back
+    // handling so the destination can be exited — mirroring NewPage. Without the
+    // root carve-out the destination could never be left via Back at any depth.
+    BackHandler(
+        enabled =
+            !navigationDrawerOpen &&
+                (
+                    paneFocus == FoldersPaneFocus.Details ||
+                        paneFocus == FoldersPaneFocus.Sort ||
+                        currentPath != FoldersViewModel.ROOT_PARENT
+                ),
+    ) {
+        when (paneFocus) {
+            FoldersPaneFocus.Details -> setPaneFocus(FoldersPaneFocus.Video)
+            FoldersPaneFocus.Sort -> setPaneFocus(paneBeforeSort)
+            else -> viewModel.goUp()
+        }
     }
 
     val goUpOrOpenDrawer = {
@@ -196,9 +216,10 @@ fun FoldersPage(
                 }
             }
             is FolderPaneTarget.ParentFolder -> goUpOrOpenDrawer()
-            is FolderPaneTarget.ThisFolder,
-            null,
-            -> Unit
+            // "This folder" is the current folder's own direct videos; activating it
+            // moves into the video pane (matching Right) instead of being a dead key.
+            is FolderPaneTarget.ThisFolder -> setPaneFocus(FoldersPaneFocus.Video)
+            null -> Unit
         }
     }
 
@@ -307,11 +328,10 @@ fun FoldersPage(
                                     setPaneFocus(FoldersPaneFocus.Sort)
                                 },
                                 goLeft = goUpOrOpenDrawer,
-                                goRight = {
-                                    if (videoItems.itemCount > 0) {
-                                        setPaneFocus(FoldersPaneFocus.Video)
-                                    }
-                                },
+                                // Always move into the video pane: when the folder has
+                                // no direct videos the pane shows "No direct videos" with
+                                // the active border, instead of silently swallowing Right.
+                                goRight = { setPaneFocus(FoldersPaneFocus.Video) },
                                 activate = activateFolderRow,
                             )
 
@@ -344,14 +364,28 @@ fun FoldersPage(
             progress = syncProgress,
             sort = videoSort,
             sortFocusRequester = sortFocus,
+            resyncFocusRequester = resyncFocus,
             onSortChange = setVideoSort,
-            onSortExitDown = { setPaneFocus(paneBeforeSort) },
-            onForceResync = {
-                coroutineScope.launch {
-                    LibraryIndexerBridge.forceResync(server.url)
-                }
-            },
+            onSortExit = { setPaneFocus(paneBeforeSort) },
+            onForceResync = { showResyncConfirm = true },
+            resyncEnabled = syncProgress !is SyncProgressUiState.Running,
             modifier = Modifier.fillMaxWidth(),
+        )
+
+        DialogPopup(
+            showDialog = showResyncConfirm,
+            title = stringResource(R.string.folders_force_resync_confirm_title),
+            dialogItems =
+                listOf(
+                    DialogItem(stringResource(R.string.folders_force_resync_confirm)) {
+                        coroutineScope.launch {
+                            LibraryIndexerBridge.forceResync(server.url)
+                        }
+                    },
+                    DialogItem(stringResource(R.string.folders_force_resync_cancel)) { },
+                ),
+            onDismissRequest = { showResyncConfirm = false },
+            waitToLoad = false,
         )
 
         Row(
@@ -459,9 +493,11 @@ private fun FoldersTopBar(
     progress: SyncProgressUiState,
     sort: FolderVideoSort,
     sortFocusRequester: FocusRequester,
+    resyncFocusRequester: FocusRequester,
     onSortChange: (FolderVideoSort) -> Unit,
-    onSortExitDown: () -> Unit,
+    onSortExit: () -> Unit,
     onForceResync: () -> Unit,
+    resyncEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -498,10 +534,41 @@ private fun FoldersTopBar(
             sort = sort,
             focusRequester = sortFocusRequester,
             onSortChange = onSortChange,
-            onExitDown = onSortExitDown,
+            onExit = onSortExit,
+            // Right off the last sort option hands focus to the resync button so it
+            // is reachable by D-pad; runCatching no-ops when the button is disabled.
+            onMoveRight = { runCatching { resyncFocusRequester.requestFocus() } },
         )
         Box(modifier = Modifier.width(12.dp))
-        Button(onClick = onForceResync) {
+        Button(
+            onClick = onForceResync,
+            enabled = resyncEnabled,
+            modifier =
+                Modifier
+                    .focusRequester(resyncFocusRequester)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) {
+                            return@onPreviewKeyEvent false
+                        }
+                        when (event.key) {
+                            // Left returns to the sort control; Up/Down leave the top
+                            // bar like the sort control does, so neither is a dead key.
+                            Key.DirectionLeft -> {
+                                runCatching { sortFocusRequester.requestFocus() }
+                                true
+                            }
+
+                            Key.DirectionUp,
+                            Key.DirectionDown,
+                            -> {
+                                onSortExit()
+                                true
+                            }
+
+                            else -> false
+                        }
+                    },
+        ) {
             Text(text = stringResource(R.string.folders_force_resync))
         }
     }
@@ -512,16 +579,27 @@ private fun FolderSortControl(
     sort: FolderVideoSort,
     focusRequester: FocusRequester,
     onSortChange: (FolderVideoSort) -> Unit,
-    onExitDown: () -> Unit,
+    onExit: () -> Unit,
+    onMoveRight: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Row(
         modifier =
             modifier
                 .focusRequester(focusRequester)
+                .onFocusChanged { focused = it.isFocused }
                 .focusable()
-                .border(1.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.extraSmall)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                // Louder focused state so entering sort mode from the lists is
+                // unmistakable, rather than a thin static border.
+                .border(
+                    width = if (focused) 2.dp else 1.dp,
+                    color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.extraSmall,
+                )
+                .background(
+                    if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                )
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) {
                         return@onPreviewKeyEvent false
@@ -533,7 +611,11 @@ private fun FolderSortControl(
                         }
 
                         Key.DirectionRight -> {
-                            onSortChange(FolderVideoSort.Longest)
+                            if (sort == FolderVideoSort.Longest) {
+                                onMoveRight()
+                            } else {
+                                onSortChange(FolderVideoSort.Longest)
+                            }
                             true
                         }
 
@@ -550,12 +632,14 @@ private fun FolderSortControl(
                             true
                         }
 
-                        Key.DirectionDown -> {
-                            onExitDown()
+                        // Down and Up both leave the sort control back to the pane the
+                        // user came from, so Up is not a swallowed dead key.
+                        Key.DirectionDown,
+                        Key.DirectionUp,
+                        -> {
+                            onExit()
                             true
                         }
-
-                        Key.DirectionUp -> true
                         else -> false
                     }
                 }

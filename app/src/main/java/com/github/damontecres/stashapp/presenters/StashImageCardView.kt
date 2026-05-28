@@ -455,6 +455,15 @@ class StashImageCardView(
     }
 
     fun onUnbindViewHolder() {
+        // A card can be recycled while still selected (e.g. flung off-screen). Detach from
+        // the shared singleton player and drop pending callbacks so neither the listener
+        // list nor the message queue retains this view (→ Context) after recycling.
+        mSelected = false
+        delayJob?.cancel()
+        delayJob = null
+        removeCallbacks(selectedMessage)
+        StashExoPlayer.removeListener(listener)
+
         // Remove references to images so that the garbage collector can free up memory
         badgeImage = null
         mainImage = null

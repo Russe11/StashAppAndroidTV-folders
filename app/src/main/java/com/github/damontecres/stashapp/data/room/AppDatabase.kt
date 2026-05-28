@@ -13,8 +13,11 @@ import com.github.damontecres.stashapp.folders.data.FolderSyncState
 // (folder_scenes.serverUrl+path, folders.serverUrl+name). v8 adds
 // folders.thumbnailUrl so the child-folder query no longer runs a correlated
 // scene lookup per folder row. v9 adds direct-video summary columns for the
-// New feed. StashApplication wires those migrations into the database builder;
-// fallbackToDestructiveMigration() remains app-side as a safety net.
+// New feed. v10 adds folder_scenes(serverUrl, updatedAtEpochMs) for the New
+// feed sort and drops three redundant single-column indexes (folder_scenes.path,
+// folder_scenes.parentPath, folders.parentPath) that are fully covered by their
+// serverUrl-prefixed composites. StashApplication wires those migrations into the
+// database builder; fallbackToDestructiveMigration() remains app-side as a safety net.
 @Database(
     entities = [
         RecentSearchItem::class,
@@ -23,7 +26,7 @@ import com.github.damontecres.stashapp.folders.data.FolderSyncState
         FolderNode::class,
         FolderSyncState::class,
     ],
-    version = 9,
+    version = 10,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

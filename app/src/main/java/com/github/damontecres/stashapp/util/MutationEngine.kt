@@ -89,7 +89,13 @@ class MutationEngine(
             Log.v(TAG, "executeMutation $id $mutationName start")
             val response = client.mutation(mutation).execute()
             if (response.data != null) {
-                Log.v(TAG, "executeMutation $id $mutationName successful")
+                if (!response.errors.isNullOrEmpty()) {
+                    // Partial success: the server returned data alongside errors. Surface
+                    // them instead of silently dropping them (the caller still gets the data).
+                    Log.w(TAG, "Partial errors in $id $mutationName: ${response.errors}")
+                } else {
+                    Log.v(TAG, "executeMutation $id $mutationName successful")
+                }
                 return@withContext response
             } else if (response.exception != null) {
                 throw createException(id, mutationName, response.exception!!) { msg, ex ->

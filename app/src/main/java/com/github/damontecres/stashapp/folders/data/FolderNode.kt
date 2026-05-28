@@ -26,7 +26,6 @@ import androidx.room.Index
     tableName = "folders",
     primaryKeys = ["serverUrl", "path"],
     indices = [
-        Index(value = ["parentPath"]),
         Index(value = ["serverUrl", "parentPath"]),
         // The left-pane query orders by `name COLLATE NOCASE`. A composite
         // index on (serverUrl, name) lets SQLite walk the index in order

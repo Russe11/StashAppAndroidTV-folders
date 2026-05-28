@@ -32,6 +32,18 @@ query CountScenes($filter: FindFilterType, $scene_filter: SceneFilterType, $ids:
     }
 }
 
+# Lean projection used only by the Folders library indexer sync. It fetches just
+# the columns the local folder cache stores, avoiding the heavy SlimSceneData
+# graph (urls, details, scene_markers, galleries, studio, groups, performers)
+# when streaming tens of thousands of scenes on constrained TV hardware.
+query FindFolderScenes($filter: FindFilterType, $scene_filter: SceneFilterType, $ids: [ID!]) {
+    findScenes(filter: $filter, scene_filter: $scene_filter, ids: $ids) {
+        scenes {
+            ...FolderSceneData
+        }
+    }
+}
+
 fragment SlimSceneData on Scene {
     id
     title
@@ -211,4 +223,24 @@ fragment VideoFile on VideoFile {
 fragment Caption on VideoCaption {
     caption_type
     language_code
+}
+
+# Minimal scene projection for the Folders indexer. Keep this in sync with the
+# columns persisted in FolderScene (see LibraryIndexer.persistBatch).
+fragment FolderSceneData on Scene {
+    id
+    title
+    rating100
+    organized
+    updated_at @catch(to: NULL)
+    files {
+        ...VideoFile
+    }
+    paths {
+        screenshot
+        preview
+    }
+    tags {
+        ...SlimTagData
+    }
 }

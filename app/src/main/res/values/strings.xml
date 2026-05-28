@@ -49,6 +49,9 @@
     <string name="new_video_type">Video</string>
     <string name="folders_indexing">Indexing %1$d / %2$d scenes…</string>
     <string name="folders_force_resync">Force resync</string>
+    <string name="folders_force_resync_confirm_title">Clear the local index and rescan? This can take several minutes.</string>
+    <string name="folders_force_resync_confirm">Clear and rescan</string>
+    <string name="folders_force_resync_cancel">Cancel</string>
     <string name="folders_empty">No folders yet — indexing in progress.</string>
     <string name="folders_this_folder">This folder</string>
     <string name="folders_direct_videos">%1$d direct videos</string>

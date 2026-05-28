@@ -1,11 +1,13 @@
 # Project-specific R8 rules.
 #
-# Keep this file intentionally small. The release build uses Android's optimized
-# default rules first; add library-specific rules here only when R8 proves they
-# are required.
+# NOTE: the release build currently sets isMinifyEnabled=false and
+# isShrinkResources=false (see app/build.gradle.kts), so R8 does NOT run and
+# nothing in this file takes effect today. It exists as the staging ground for
+# the keep rules that must be written *before* shrinking is ever re-enabled —
+# see the "Re-enable release shrinking" entry in docs/agent-memory/optimizations.md.
 
-# AGP 9.1.1 bundles R8 9.1.31, which currently crashes in its optimizer on this
-# app with IndexOutOfBoundsException. Keep shrinking/obfuscation/resource
-# shrinking enabled, but skip the crashing optimization phase until the Android
-# Gradle Plugin/R8 toolchain is upgraded.
+# Background: AGP 9.1.1 bundles R8 9.1.31, whose optimizer crashed on this app
+# (IndexOutOfBoundsException), which is why shrinking was disabled as a startup
+# hotfix. `-dontoptimize` was the partial middle ground that avoided the optimizer
+# crash and is kept here for whenever minify/shrink are turned back on.
 -dontoptimize

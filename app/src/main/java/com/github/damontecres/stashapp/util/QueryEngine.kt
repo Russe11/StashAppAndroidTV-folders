@@ -86,7 +86,14 @@ class QueryEngine(
 
             val response = query.execute()
             if (response.data != null) {
-                Log.v(TAG, "executeQuery $id $queryName successful")
+                if (!response.errors.isNullOrEmpty()) {
+                    // Partial success: the server returned data alongside errors. The data
+                    // may be truncated, so surface the errors instead of silently dropping
+                    // them (the caller still gets whatever data arrived).
+                    Log.w(TAG, "Partial errors in $id $queryName: ${response.errors}")
+                } else {
+                    Log.v(TAG, "executeQuery $id $queryName successful")
+                }
                 return@withContext response
             } else if (response.exception != null) {
                 throw createException(id, queryName, response.exception!!) { msg, ex ->

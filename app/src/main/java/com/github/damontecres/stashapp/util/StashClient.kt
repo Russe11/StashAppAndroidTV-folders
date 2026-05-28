@@ -38,7 +38,7 @@ class StashClient private constructor() {
         private const val TAG = "StashClient"
         private const val OK_HTTP_TAG = "$TAG.OkHttpClient"
 
-        val okHttpClient = createOkHttpClient()
+        val okHttpClient by lazy { createOkHttpClient() }
 
         private fun createOkHttpClient(): OkHttpClient {
             val context = StashApplication.getApplication()

@@ -3,8 +3,8 @@ package com.github.damontecres.stashapp.folders.sync
 import android.util.Log
 import com.apollographql.apollo.api.Optional
 import com.github.damontecres.stashapp.api.CountScenesQuery
-import com.github.damontecres.stashapp.api.FindScenesQuery
-import com.github.damontecres.stashapp.api.fragment.SlimSceneData
+import com.github.damontecres.stashapp.api.FindFolderScenesQuery
+import com.github.damontecres.stashapp.api.fragment.FolderSceneData
 import com.github.damontecres.stashapp.api.type.CriterionModifier
 import com.github.damontecres.stashapp.api.type.FindFilterType
 import com.github.damontecres.stashapp.api.type.SceneFilterType
@@ -222,7 +222,7 @@ class LibraryIndexer(
     }
 
     /**
-     * Fetch a single page of [SlimSceneData] from the server.
+     * Fetch a single page of [FolderSceneData] from the server.
      *
      * The find filter sorts by `updated_at ASC` so partial progress is recoverable: if we
      * crash on page N, page N still re-fetches the same window on resume. `sceneFilter`
@@ -231,7 +231,7 @@ class LibraryIndexer(
     private suspend fun fetchPage(
         page: Int,
         sinceEpochMs: Long?,
-    ): List<SlimSceneData> {
+    ): List<FolderSceneData> {
         val findFilter =
             FindFilterType(
                 per_page = Optional.present(PAGE_SIZE),
@@ -254,7 +254,7 @@ class LibraryIndexer(
                 null
             }
         val query =
-            FindScenesQuery(
+            FindFolderScenesQuery(
                 filter = findFilter,
                 scene_filter = sceneFilter,
                 ids = null,
@@ -265,7 +265,7 @@ class LibraryIndexer(
             throw IllegalStateException(message)
         }
         val data = response.data ?: return emptyList()
-        return data.findScenes.scenes.map { it.slimSceneData }
+        return data.findScenes.scenes.map { it.folderSceneData }
     }
 
     /**
@@ -282,13 +282,13 @@ class LibraryIndexer(
     }
 
     /**
-     * Map [SlimSceneData] → [FolderScene] and persist. Returns the persisted rows and the
+     * Map [FolderSceneData] → [FolderScene] and persist. Returns the persisted rows and the
      * max `updatedAtEpochMs` in this batch so the caller can advance the delta cursor.
      *
      * Folder hierarchy is *not* maintained here — counts are recomputed in
      * [rebuildAllFolderCounts] once a scan finishes.
      */
-    private suspend fun persistBatch(scenes: List<SlimSceneData>): Pair<List<FolderScene>, Long> {
+    private suspend fun persistBatch(scenes: List<FolderSceneData>): Pair<List<FolderScene>, Long> {
         if (scenes.isEmpty()) return emptyList<FolderScene>() to 0L
 
         var maxUpdated = 0L
@@ -332,76 +332,16 @@ class LibraryIndexer(
      * Done after every scan (full and delta — see comment in [deltaScan]).
      */
     private suspend fun rebuildAllFolderCounts() {
-        val directCounts = HashMap<String, Int>()
-        val recursiveCounts = HashMap<String, Int>()
-        val thumbnailCandidates = HashMap<String, ThumbnailCandidate>()
-        val directSummaries = HashMap<String, DirectFolderSummary>()
-
         // Read every cached scene once, then aggregate counts and thumbnail candidates
         // in memory. This moves the expensive recursive thumbnail lookup out of the
         // folder-browsing query path and into the background sync path.
         val allScenes = collectScenes()
-
-        for (scene in allScenes) {
-            val parent = scene.parentPath
-            directCounts.merge(parent, 1) { a, b -> a + b }
-            val currentDirectSummary = directSummaries[parent]
-            val candidateDirectSummary = DirectFolderSummary.from(scene)
-            if (currentDirectSummary == null || candidateDirectSummary.isBetterThan(currentDirectSummary)) {
-                directSummaries[parent] = candidateDirectSummary
-            }
-            // Walk ancestors. parent always ends in "/". Root is "/".
-            var ancestor = parent
-            val candidate = ThumbnailCandidate.from(scene)
-            while (true) {
-                recursiveCounts.merge(ancestor, 1) { a, b -> a + b }
-                if (candidate != null) {
-                    val current = thumbnailCandidates[ancestor]
-                    if (current == null || candidate.isBetterThan(current)) {
-                        thumbnailCandidates[ancestor] = candidate
-                    }
-                }
-                if (ancestor == "/") break
-                ancestor = parentFolderOf(ancestor)
-            }
-        }
-
-        // Materialise every folder we touched.
-        val allFolderPaths = (directCounts.keys + recursiveCounts.keys).toMutableSet()
-        // Ensure ancestors of every directCount folder are present even if they have a
-        // recursiveCount of 0 (shouldn't happen, but defensive).
-        for (p in directCounts.keys.toList()) {
-            var ancestor = p
-            while (ancestor != "/") {
-                ancestor = parentFolderOf(ancestor)
-                allFolderPaths += ancestor
-            }
-        }
-
-        val rows =
-            allFolderPaths.map { path ->
-                FolderNode(
-                    serverUrl = server.url,
-                    path = path,
-                    name = folderName(path),
-                    parentPath = if (path == "/") "" else parentFolderOf(path),
-                    recursiveCount = recursiveCounts[path] ?: 0,
-                    directCount = directCounts[path] ?: 0,
-                    thumbnailUrl = thumbnailCandidates[path]?.url,
-                    newestDirectUpdatedAtEpochMs = directSummaries[path]?.newestUpdatedAtEpochMs ?: 0,
-                    newestDirectThumbnailUrl = directSummaries[path]?.thumbnailUrl,
-                )
-            }
+        val rows = computeFolderNodes(server.url, allScenes)
         // Drop the old folder rows for this server before upserting fresh ones so
-        // directories that lost all their scenes don't linger with stale counts. The
-        // delete + upsert pair is *not* atomic, but a transient empty folder table is
-        // harmless — the UI's `observeChildren` flow will re-emit once the upsert lands.
-        // For a strictly atomic rebuild we'd add an @Transaction method on FolderDao, but
-        // that's a follow-up.
-        dao.deleteFoldersForServer(server.url)
-        if (rows.isNotEmpty()) {
-            dao.upsertFolders(rows)
-        }
+        // directories that lost all their scenes don't linger with stale counts.
+        // `replaceFolders` does the delete + upsert in one @Transaction so the
+        // Folders UI never observes a transient empty folder table mid-rebuild.
+        dao.replaceFolders(server.url, rows)
     }
 
     private suspend fun collectScenes(): List<FolderScene> = dao.allScenesForServer(server.url)
@@ -547,6 +487,77 @@ class LibraryIndexer(
                 }
             }
             return best
+        }
+
+        /**
+         * Pure aggregation of the folder tree from a flat list of cached scenes. Walks
+         * `scenes` once, accumulating each folder's `directCount` (scenes whose
+         * `parentPath` is exactly this folder) and `recursiveCount` (scenes anywhere
+         * beneath it), plus the representative thumbnail and the New-feed "newest direct"
+         * summary. Every ancestor folder is materialised even when it holds no direct
+         * scenes, so the browser can render intermediate directories.
+         *
+         * Extracted from the sync path so the direct-vs-recursive rollup — the fork's
+         * defining correctness property — can be unit-tested without Room or Apollo.
+         */
+        internal fun computeFolderNodes(
+            serverUrl: String,
+            scenes: List<FolderScene>,
+        ): List<FolderNode> {
+            val directCounts = HashMap<String, Int>()
+            val recursiveCounts = HashMap<String, Int>()
+            val thumbnailCandidates = HashMap<String, ThumbnailCandidate>()
+            val directSummaries = HashMap<String, DirectFolderSummary>()
+
+            for (scene in scenes) {
+                val parent = scene.parentPath
+                directCounts.merge(parent, 1) { a, b -> a + b }
+                val currentDirectSummary = directSummaries[parent]
+                val candidateDirectSummary = DirectFolderSummary.from(scene)
+                if (currentDirectSummary == null || candidateDirectSummary.isBetterThan(currentDirectSummary)) {
+                    directSummaries[parent] = candidateDirectSummary
+                }
+                // Walk ancestors. parent always ends in "/". Root is "/".
+                var ancestor = parent
+                val candidate = ThumbnailCandidate.from(scene)
+                while (true) {
+                    recursiveCounts.merge(ancestor, 1) { a, b -> a + b }
+                    if (candidate != null) {
+                        val current = thumbnailCandidates[ancestor]
+                        if (current == null || candidate.isBetterThan(current)) {
+                            thumbnailCandidates[ancestor] = candidate
+                        }
+                    }
+                    if (ancestor == "/") break
+                    ancestor = parentFolderOf(ancestor)
+                }
+            }
+
+            // Materialise every folder we touched.
+            val allFolderPaths = (directCounts.keys + recursiveCounts.keys).toMutableSet()
+            // Ensure ancestors of every directCount folder are present even if they have a
+            // recursiveCount of 0 (shouldn't happen, but defensive).
+            for (p in directCounts.keys.toList()) {
+                var ancestor = p
+                while (ancestor != "/") {
+                    ancestor = parentFolderOf(ancestor)
+                    allFolderPaths += ancestor
+                }
+            }
+
+            return allFolderPaths.map { path ->
+                FolderNode(
+                    serverUrl = serverUrl,
+                    path = path,
+                    name = folderName(path),
+                    parentPath = if (path == "/") "" else parentFolderOf(path),
+                    recursiveCount = recursiveCounts[path] ?: 0,
+                    directCount = directCounts[path] ?: 0,
+                    thumbnailUrl = thumbnailCandidates[path]?.url,
+                    newestDirectUpdatedAtEpochMs = directSummaries[path]?.newestUpdatedAtEpochMs ?: 0,
+                    newestDirectThumbnailUrl = directSummaries[path]?.thumbnailUrl,
+                )
+            }
         }
     }
 

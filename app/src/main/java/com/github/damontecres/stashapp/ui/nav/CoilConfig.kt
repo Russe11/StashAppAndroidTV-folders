@@ -23,9 +23,10 @@ fun CoilConfig(
 ) {
     setSingletonImageLoaderFactory { ctx ->
         val cacheLogging = preferences.cachePreferences.logCacheHits
+        // imageDiskCacheSize is stored in bytes; floor it at 10 MB, not 10 bytes.
         val diskCacheSize =
             preferences.cachePreferences.imageDiskCacheSize
-                .coerceAtLeast(10)
+                .coerceAtLeast(10L * 1024 * 1024)
         ImageLoader
             .Builder(ctx)
             .diskCache(
