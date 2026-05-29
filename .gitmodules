@@ -1,3 +1,4 @@
 [submodule "stash"]
 	path = stash-server
-	url = https://github.com/stashapp/stash.git
+	url = https://github.com/Russe11/stash.git
+	branch = deploy
