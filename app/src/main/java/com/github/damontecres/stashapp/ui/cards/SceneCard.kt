@@ -1,6 +1,7 @@
 package com.github.damontecres.stashapp.ui.cards
 
 import androidx.compose.foundation.background
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -46,14 +47,19 @@ fun SceneCard(
     modifier: Modifier = Modifier,
     cardContext: CardContext.SceneCardContext? = null,
 ) {
-    val dataTypeMap = EnumMap<DataType, Int>(DataType::class.java)
-    item?.let {
-        dataTypeMap[DataType.TAG] = item.tags.size
-        dataTypeMap[DataType.PERFORMER] = item.performers.size
-        dataTypeMap[DataType.GROUP] = item.groups.size
-        dataTypeMap[DataType.MARKER] = item.scene_markers.size
-        dataTypeMap[DataType.GALLERY] = item.galleries.size
-    }
+    // Built once per item rather than allocated + repopulated on every recompose.
+    val dataTypeMap =
+        remember(item) {
+            EnumMap<DataType, Int>(DataType::class.java).apply {
+                item?.let {
+                    this[DataType.TAG] = item.tags.size
+                    this[DataType.PERFORMER] = item.performers.size
+                    this[DataType.GROUP] = item.groups.size
+                    this[DataType.MARKER] = item.scene_markers.size
+                    this[DataType.GALLERY] = item.galleries.size
+                }
+            }
+        }
 
     RootCard(
         item = item,

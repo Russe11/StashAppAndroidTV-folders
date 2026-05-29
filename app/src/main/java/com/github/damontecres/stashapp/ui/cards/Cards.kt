@@ -32,7 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
@@ -117,14 +117,22 @@ fun ImageOverlay(
 ) {
     val context = LocalContext.current
     val showRatings = LocalGlobalContext.current.preferences.interfacePreferences.showRatingOnCards
+    // The rating colors are static resources; obtain the TypedArray once per overlay instead of on
+    // every recompose (the old code obtained+recycled it inside the body each pass). `remember` must
+    // be called unconditionally, so it is hoisted above the `if`.
+    val ratingColors =
+        remember(context) {
+            val ta = context.resources.obtainTypedArray(R.array.rating_colors)
+            val colors = IntArray(ta.length()) { ta.getColor(it, android.graphics.Color.WHITE) }
+            ta.recycle()
+            colors
+        }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (showRatings && rating100 != null && rating100 > 0) {
             val ratingText = getRatingAsDecimalString(rating100, ratingsAsStars)
             val text = context.getString(R.string.stashapp_rating) + ": $ratingText"
-            val ratingColors = context.resources.obtainTypedArray(R.array.rating_colors)
-            val bgColor = ratingColors.getColor(rating100 / 5, android.graphics.Color.WHITE)
-            ratingColors.recycle()
+            val bgColor = ratingColors.getOrElse(rating100 / 5) { android.graphics.Color.WHITE }
 
             Text(
                 modifier =
@@ -437,7 +445,7 @@ fun RootCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 ),
             ) {
-                Box(Modifier.graphicsLayer { alpha = 0.6f }) { subtitle.invoke(focusedAfterDelay) }
+                Box(Modifier.alpha(0.6f)) { subtitle.invoke(focusedAfterDelay) }
             }
             // Description
             ProvideTextStyle(
@@ -446,9 +454,8 @@ fun RootCard(
             ) {
                 Box(
                     Modifier
-                        .graphicsLayer {
-                            alpha = 0.8f
-                        }.fillMaxWidth(),
+                        .alpha(0.8f)
+                        .fillMaxWidth(),
                 ) { description.invoke(this, focusedAfterDelay) }
             }
         }

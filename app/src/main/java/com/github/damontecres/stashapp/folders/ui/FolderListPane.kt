@@ -306,6 +306,15 @@ private fun FolderRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = true),
         )
+        // Subfolder Hint: how many videos are anywhere under this folder. Already in Room, just surfaced.
+        if (node.recursiveCount > 0) {
+            Text(
+                text = "${node.recursiveCount}",
+                style = MaterialTheme.typography.bodySmall,
+                color = textColor.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
         if (canDrillIntoFolder(row)) {
             Text(
                 text = ">",
