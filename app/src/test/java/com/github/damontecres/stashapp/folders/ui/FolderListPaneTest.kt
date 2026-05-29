@@ -10,7 +10,7 @@ import org.junit.Test
 class FolderListPaneTest {
     @Test
     fun folderRowTargetAt_entersFolderFromListRowAfterParentRow() {
-        val child = folderListRow(path = "/People/Ada/", name = "Ada", thumbnailUrl = "https://example.test/ada.jpg")
+        val child = folderListRow(path = "/People/Ada/", name = "Ada", thumbnailSceneId = "1")
 
         val target = folderRowTargetAt(showParent = true, focusedRowIndex = 1, children = listOf(child))
 
@@ -180,7 +180,7 @@ class FolderListPaneTest {
     private fun folderListRow(
         path: String = "/People/",
         name: String = "People",
-        thumbnailUrl: String? = null,
+        thumbnailSceneId: String? = null,
         recursiveCount: Int = 1,
         directCount: Int = 0,
         childFolderCount: Int = 0,
@@ -194,7 +194,7 @@ class FolderListPaneTest {
                     parentPath = "/",
                     recursiveCount = recursiveCount,
                     directCount = directCount,
-                    thumbnailUrl = thumbnailUrl,
+                    thumbnailSceneId = thumbnailSceneId,
                 ),
             childFolderCount = childFolderCount,
         )
@@ -215,8 +215,6 @@ class FolderListPaneTest {
             durationSeconds = durationSeconds,
             rating100 = null,
             organized = false,
-            screenshotUrl = null,
-            previewUrl = null,
             updatedAtEpochMs = updatedAtEpochMs,
         )
 }

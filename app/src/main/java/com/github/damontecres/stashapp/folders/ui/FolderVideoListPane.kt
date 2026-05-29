@@ -32,6 +32,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.folders.data.FolderScene
+import com.github.damontecres.stashapp.folders.data.SceneUrlBuilder
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.components.CircularProgress
 import java.time.Instant
@@ -172,8 +173,11 @@ private fun FolderVideoRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SceneThumbnailPreview(
-            thumbnailUrl = scene.screenshotUrl,
-            previewUrl = scene.previewUrl,
+            // Rebuild media URLs at render time against the current server root rather than
+            // reading a cached absolute URL (which would go stale after a server move).
+            thumbnailUrl =
+                SceneUrlBuilder.screenshotUrl(scene.serverUrl, scene.sceneId, scene.updatedAtEpochMs),
+            previewUrl = SceneUrlBuilder.previewUrl(scene.serverUrl, scene.sceneId),
             contentDescription = displayTitle,
             selected = previewSelected,
             uiConfig = uiConfig,

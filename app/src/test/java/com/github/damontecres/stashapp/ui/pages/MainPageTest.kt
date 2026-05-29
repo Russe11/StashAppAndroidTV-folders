@@ -10,8 +10,8 @@ class MainPageTest {
         val rows =
             listOf(
                 newItemRow(itemType = NewItemRow.TYPE_FOLDER, itemId = "/Movies/", path = "/Movies/", title = "Movies"),
-                newItemRow(itemType = NewItemRow.TYPE_SCENE, itemId = "scene-new", path = "/Movies/new.mp4", title = "Newest", thumbnailUrl = "new.jpg"),
-                newItemRow(itemType = NewItemRow.TYPE_SCENE, itemId = "scene-old", path = "/Movies/old.mp4", title = "", thumbnailUrl = "old.jpg"),
+                newItemRow(itemType = NewItemRow.TYPE_SCENE, itemId = "scene-new", path = "/Movies/new.mp4", title = "Newest", thumbnailSceneId = "scene-new"),
+                newItemRow(itemType = NewItemRow.TYPE_SCENE, itemId = "scene-old", path = "/Movies/old.mp4", title = "", thumbnailSceneId = "scene-old"),
             )
 
         val scenes = rows.toHomeNewestScenes()
@@ -19,8 +19,16 @@ class MainPageTest {
         assertEquals(listOf("scene-new", "scene-old"), scenes.map { it.id })
         assertEquals("Newest", scenes[0].title)
         assertEquals("old", scenes[1].title)
-        assertEquals("new.jpg", scenes[0].paths.screenshot)
-        assertEquals("old.jpg", scenes[1].paths.screenshot)
+        // Screenshot is rebuilt at render time from serverUrl + sceneId + updated_at (whole
+        // seconds), not read from a stored absolute URL.
+        assertEquals(
+            "https://stash.example.test/scene/scene-new/screenshot?t=0",
+            scenes[0].paths.screenshot,
+        )
+        assertEquals(
+            "https://stash.example.test/scene/scene-old/screenshot?t=0",
+            scenes[1].paths.screenshot,
+        )
     }
 
     private fun newItemRow(
@@ -28,7 +36,7 @@ class MainPageTest {
         itemId: String,
         path: String,
         title: String?,
-        thumbnailUrl: String? = null,
+        thumbnailSceneId: String? = null,
     ): NewItemRow =
         NewItemRow(
             serverUrl = "https://stash.example.test",
@@ -37,8 +45,7 @@ class MainPageTest {
             path = path,
             parentPath = "/Movies/",
             title = title,
-            thumbnailUrl = thumbnailUrl,
-            previewUrl = "preview.mp4",
+            thumbnailSceneId = thumbnailSceneId,
             updatedAtEpochMs = 100,
             directCount = 0,
         )

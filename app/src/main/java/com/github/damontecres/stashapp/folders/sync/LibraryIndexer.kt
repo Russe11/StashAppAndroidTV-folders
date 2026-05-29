@@ -14,6 +14,7 @@ import com.github.damontecres.stashapp.folders.data.FolderDao
 import com.github.damontecres.stashapp.folders.data.FolderNode
 import com.github.damontecres.stashapp.folders.data.FolderScene
 import com.github.damontecres.stashapp.folders.data.FolderSyncState
+import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.StashServer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -164,6 +165,12 @@ class LibraryIndexer(
         // scan this is the correct moment because we know nothing else is being added.
         rebuildAllFolderCounts()
 
+        // Initialise the deletedSince resume cursor to the server's current watermark. A full
+        // scan has just taken a complete snapshot of the live id set, so there is nothing to
+        // prune; we only need the latest cursor so the *next* delta sync resumes from here
+        // rather than replaying the entire tombstone history.
+        val cursor = initialDeletedSinceCursor()
+
         dao.upsertSyncState(
             FolderSyncState(
                 serverUrl = server.url,
@@ -171,6 +178,7 @@ class LibraryIndexer(
                 scanComplete = true,
                 scanProgressTotal = totalDone,
                 scanProgressDone = totalDone,
+                deletedSinceCursor = cursor,
             ),
         )
         _progress.value = SyncProgress.Completed
@@ -179,6 +187,8 @@ class LibraryIndexer(
 
     private suspend fun deltaScan(maxUpdatedAtEpochMs: Long): SyncResult {
         _progress.value = SyncProgress.Running(done = 0, total = null)
+
+        val priorCursor = dao.getSyncState(server.url)?.deletedSinceCursor
 
         var page = 1
         var totalDone = 0
@@ -200,6 +210,13 @@ class LibraryIndexer(
             page += 1
         }
 
+        // Prune scenes deleted on the server since the last sync. This is the fix for the
+        // phantom-scenes bug: the delta query above only finds new/edited scenes, never
+        // deletions, so without this step removed scenes lingered in the cache forever. Gated
+        // on the NG `deletedSince` capability; advances the resume cursor. Runs before the
+        // count rebuild so the re-aggregate reflects the pruned set.
+        val newCursor = pruneDeletions(priorCursor)
+
         // Approximation: recompute counts for *all* folders rather than diffing affected
         // ancestors. A delta is small, and a full re-aggregate against `folder_scenes`
         // is correct-by-construction and avoids the bookkeeping needed to handle moves
@@ -215,6 +232,7 @@ class LibraryIndexer(
                 scanComplete = true,
                 scanProgressTotal = (dao.countScenes(server.url)).coerceAtLeast(0),
                 scanProgressDone = totalDone,
+                deletedSinceCursor = newCursor,
             ),
         )
         _progress.value = SyncProgress.Completed
@@ -281,6 +299,115 @@ class LibraryIndexer(
         return response.data?.findScenes?.count ?: 0
     }
 
+    // -- Deletion pruning (NG `deletedSince` feed) ---------------------------------------
+    //
+    // The delta scan only finds new/edited scenes, so without pruning a scene deleted on the
+    // server lingers forever as a phantom row. These helpers consume the NG `deletedSince`
+    // cursor feed to remove tombstoned scene ids, with a full id-set reconcile when the cursor
+    // has aged past the server's retention horizon.
+
+    /**
+     * Page the `deletedSince` feed from [priorCursor], removing tombstoned scene ids from the
+     * cache, and return the cursor to persist. No-ops (returning [priorCursor]) when the server
+     * does not advertise the `deletedSince` capability — this client is NG-only and gates on the
+     * feature flag, never on a semantic version.
+     *
+     * If the server reports `pruned == true`, [priorCursor] predates the retention horizon and
+     * the incremental feed can no longer be trusted, so we fall back to a full id-set reconcile.
+     */
+    private suspend fun pruneDeletions(priorCursor: String?): String? {
+        if (!server.serverPreferences.capabilities.supportsDeletedSince) {
+            return priorCursor
+        }
+        val queryEngine = QueryEngine(server)
+        var cursor = priorCursor
+        try {
+            while (true) {
+                val page =
+                    queryEngine.deletedSince(
+                        since = null,
+                        after = cursor,
+                        limit = DELETED_SINCE_PAGE_SIZE,
+                    )
+
+                if (page.pruned) {
+                    // Our cursor aged out of the server's retention horizon: the incremental
+                    // feed dropped tombstones we never saw, so reconcile the whole id set.
+                    Log.i(TAG, "deletedSince pruned for ${server.url}; full id-set reconcile")
+                    reconcileDeletions(queryEngine)
+                    // Re-anchor to the server's current watermark so the next sync resumes here.
+                    return page.cursor.ifEmpty { initialDeletedSinceCursor(queryEngine) }
+                }
+
+                val deletedSceneIds =
+                    page.records
+                        .filter { it.entity == ENTITY_SCENES }
+                        .map { it.id }
+                if (deletedSceneIds.isNotEmpty()) {
+                    deletedSceneIds.chunked(SQLITE_PARAM_LIMIT).forEach { chunk ->
+                        dao.deleteScenesByIds(server.url, chunk)
+                    }
+                    Log.i(TAG, "Pruned ${deletedSceneIds.size} deleted scene(s) for ${server.url}")
+                }
+
+                cursor = page.cursor
+                if (!page.has_more) break
+            }
+        } catch (t: Throwable) {
+            // A prune failure must not fail the whole sync. Keep the prior cursor so the next
+            // run retries from the same point rather than skipping tombstones.
+            Log.w(TAG, "deletedSince prune failed for ${server.url}: ${t.message}", t)
+            return priorCursor
+        }
+        return cursor
+    }
+
+    /**
+     * Full id-set reconcile: fetch the server's live scene id set and delete any cached scene
+     * the server no longer has. Used when the incremental `deletedSince` feed can't be trusted
+     * (cursor pruned). Mirrors the macOS `reconcileDeletions` fallback.
+     */
+    private suspend fun reconcileDeletions(queryEngine: QueryEngine) {
+        val cachedIds = dao.allSceneIdsForServer(server.url).toHashSet()
+        if (cachedIds.isEmpty()) return
+
+        val liveIds = HashSet<String>(cachedIds.size)
+        var page = 1
+        while (true) {
+            val scenes = fetchPage(page = page, sinceEpochMs = null)
+            if (scenes.isEmpty()) break
+            scenes.forEach { liveIds.add(it.id) }
+            if (scenes.size < PAGE_SIZE) break
+            page += 1
+        }
+
+        val staleIds = cachedIds.filter { it !in liveIds }
+        if (staleIds.isNotEmpty()) {
+            staleIds.chunked(SQLITE_PARAM_LIMIT).forEach { chunk ->
+                dao.deleteScenesByIds(server.url, chunk)
+            }
+            Log.i(TAG, "Reconcile removed ${staleIds.size} stale scene(s) for ${server.url}")
+        }
+    }
+
+    /**
+     * The server's current `deletedSince` watermark (latest cursor) without applying any
+     * records — used to anchor a fresh full scan so the next delta sync resumes from here.
+     */
+    private suspend fun initialDeletedSinceCursor(): String? {
+        if (!server.serverPreferences.capabilities.supportsDeletedSince) return null
+        return initialDeletedSinceCursor(QueryEngine(server))
+    }
+
+    private suspend fun initialDeletedSinceCursor(queryEngine: QueryEngine): String? =
+        try {
+            // No cursor and no `since` returns the latest page; we only want its watermark.
+            queryEngine.deletedSince(since = null, after = null, limit = 1).cursor
+        } catch (t: Throwable) {
+            Log.w(TAG, "deletedSince cursor init failed for ${server.url}: ${t.message}", t)
+            null
+        }
+
     /**
      * Map [FolderSceneData] → [FolderScene] and persist. Returns the persisted rows and the
      * max `updatedAtEpochMs` in this batch so the caller can advance the delta cursor.
@@ -303,6 +430,9 @@ class LibraryIndexer(
 
                 val tagIds = scene.tags.map { it.slimTagData.id }
 
+                // Media URLs are NOT stored: the screenshot/preview are rebuilt at render time
+                // by SceneUrlBuilder from sceneId + updatedAtEpochMs against the current server
+                // root, so a server move (or another server's rows) can't leave stale origins.
                 FolderScene(
                     serverUrl = server.url,
                     sceneId = scene.id,
@@ -312,8 +442,6 @@ class LibraryIndexer(
                     durationSeconds = scene.files.firstOrNull()?.videoFile?.duration,
                     rating100 = scene.rating100,
                     organized = scene.organized,
-                    screenshotUrl = scene.paths.screenshot,
-                    previewUrl = scene.paths.preview,
                     tagIdsJson = tagIdsToJson(tagIds),
                     updatedAtEpochMs = updatedEpoch,
                 )
@@ -395,6 +523,15 @@ class LibraryIndexer(
         private const val TAG = "LibraryIndexer"
         private const val PAGE_SIZE = 1000
         private const val SORT_FIELD = "updated_at"
+
+        // deletedSince prune tuning.
+        private const val DELETED_SINCE_PAGE_SIZE = 1000
+
+        // The DeletedRecord.entity value the server uses for scenes (see ng-contract.md §3).
+        private const val ENTITY_SCENES = "scenes"
+
+        // SQLite caps host parameters at 999 per statement; chunk id lists below this.
+        private const val SQLITE_PARAM_LIMIT = 900
         private val SLASH_RUN_REGEX = Regex("/+")
 
         /**
@@ -459,19 +596,23 @@ class LibraryIndexer(
             return if (lastSlash < 0) trimmed else trimmed.substring(lastSlash + 1)
         }
 
-        internal fun representativeThumbnailFor(
+        /**
+         * The scene id whose screenshot represents [folderPath] (the URL is rebuilt at render
+         * time by SceneUrlBuilder). Null when no scene lives under the folder.
+         */
+        internal fun representativeThumbnailSceneIdFor(
             folderPath: String,
             scenes: List<FolderScene>,
         ): String? {
             var best: ThumbnailCandidate? = null
             for (scene in scenes) {
                 if (!scene.path.startsWith(folderPath)) continue
-                val candidate = ThumbnailCandidate.from(scene) ?: continue
+                val candidate = ThumbnailCandidate.from(scene)
                 if (best == null || candidate.isBetterThan(best)) {
                     best = candidate
                 }
             }
-            return best?.url
+            return best?.sceneId
         }
 
         internal fun directFolderSummaryFor(
@@ -522,11 +663,9 @@ class LibraryIndexer(
                 val candidate = ThumbnailCandidate.from(scene)
                 while (true) {
                     recursiveCounts.merge(ancestor, 1) { a, b -> a + b }
-                    if (candidate != null) {
-                        val current = thumbnailCandidates[ancestor]
-                        if (current == null || candidate.isBetterThan(current)) {
-                            thumbnailCandidates[ancestor] = candidate
-                        }
+                    val current = thumbnailCandidates[ancestor]
+                    if (current == null || candidate.isBetterThan(current)) {
+                        thumbnailCandidates[ancestor] = candidate
                     }
                     if (ancestor == "/") break
                     ancestor = parentFolderOf(ancestor)
@@ -546,6 +685,7 @@ class LibraryIndexer(
             }
 
             return allFolderPaths.map { path ->
+                val thumb = thumbnailCandidates[path]
                 FolderNode(
                     serverUrl = serverUrl,
                     path = path,
@@ -553,9 +693,10 @@ class LibraryIndexer(
                     parentPath = if (path == "/") "" else parentFolderOf(path),
                     recursiveCount = recursiveCounts[path] ?: 0,
                     directCount = directCounts[path] ?: 0,
-                    thumbnailUrl = thumbnailCandidates[path]?.url,
+                    thumbnailSceneId = thumb?.sceneId,
+                    thumbnailUpdatedAtEpochMs = thumb?.updatedAtEpochMs ?: 0,
                     newestDirectUpdatedAtEpochMs = directSummaries[path]?.newestUpdatedAtEpochMs ?: 0,
-                    newestDirectThumbnailUrl = directSummaries[path]?.thumbnailUrl,
+                    newestDirectSceneId = directSummaries[path]?.sceneId,
                 )
             }
         }
@@ -563,23 +704,26 @@ class LibraryIndexer(
 
     internal data class DirectFolderSummary(
         val newestUpdatedAtEpochMs: Long = 0,
-        val thumbnailUrl: String? = null,
+        val sceneId: String? = null,
     ) {
         fun isBetterThan(other: DirectFolderSummary): Boolean =
             newestUpdatedAtEpochMs > other.newestUpdatedAtEpochMs ||
-                (newestUpdatedAtEpochMs == other.newestUpdatedAtEpochMs && thumbnailUrl != null && other.thumbnailUrl == null)
+                (newestUpdatedAtEpochMs == other.newestUpdatedAtEpochMs && sceneId != null && other.sceneId == null)
 
         companion object {
             fun from(scene: FolderScene): DirectFolderSummary =
                 DirectFolderSummary(
                     newestUpdatedAtEpochMs = scene.updatedAtEpochMs,
-                    thumbnailUrl = scene.screenshotUrl?.takeIf { it.isNotBlank() },
+                    // Every cached scene has a server-renderable screenshot; the id is the
+                    // stable handle the render-time SceneUrlBuilder rebuilds the URL from.
+                    sceneId = scene.sceneId,
                 )
         }
     }
 
     private data class ThumbnailCandidate(
-        val url: String,
+        val sceneId: String,
+        val updatedAtEpochMs: Long,
         val organized: Boolean,
         val numericSceneId: Long,
     ) {
@@ -591,14 +735,13 @@ class LibraryIndexer(
             }
 
         companion object {
-            fun from(scene: FolderScene): ThumbnailCandidate? {
-                val url = scene.screenshotUrl?.takeIf { it.isNotBlank() } ?: return null
-                return ThumbnailCandidate(
-                    url = url,
+            fun from(scene: FolderScene): ThumbnailCandidate =
+                ThumbnailCandidate(
+                    sceneId = scene.sceneId,
+                    updatedAtEpochMs = scene.updatedAtEpochMs,
                     organized = scene.organized,
                     numericSceneId = scene.sceneId.toLongOrNull() ?: 0L,
                 )
-            }
         }
     }
 }

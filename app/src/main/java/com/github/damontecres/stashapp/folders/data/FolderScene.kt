@@ -19,6 +19,11 @@ import androidx.room.Index
  *
  * `serverUrl` is part of every row so multiple Stash servers can coexist in the cache
  * without cross-contamination.
+ *
+ * Media URLs (screenshot / preview) are deliberately **not** stored: they embed the server
+ * origin and a `?t=` cache-buster, so caching them broke after a server move and across
+ * multiple servers. They are rebuilt at render time by [SceneUrlBuilder] from the stable
+ * [sceneId] + [updatedAtEpochMs] against the current server root.
  */
 @Entity(
     tableName = "folder_scenes",
@@ -50,8 +55,6 @@ data class FolderScene(
     val durationSeconds: Double?,
     val rating100: Int?,
     val organized: Boolean,
-    val screenshotUrl: String?,
-    val previewUrl: String?,
     @ColumnInfo(defaultValue = "[]")
     val tagIdsJson: String = "[]",
     val updatedAtEpochMs: Long,

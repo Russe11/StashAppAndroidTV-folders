@@ -85,11 +85,28 @@ class LibraryIndexerCountTest {
         assertEquals(emptyList<FolderNode>(), LibraryIndexer.computeFolderNodes(SERVER, emptyList()))
     }
 
+    @Test
+    fun computeFolderNodes_storesRepresentativeSceneIdNotUrl() {
+        // Task 5: folder thumbnails are identified by the representative scene *id* (URL rebuilt
+        // at render time), never a cached absolute URL. /a/ prefers the organized scene "2".
+        val scenes =
+            listOf(
+                folderScene("5", "/a/unorganized.mp4", organized = false, updatedAtEpochMs = 100),
+                folderScene("2", "/a/b/organized.mp4", organized = true, updatedAtEpochMs = 50),
+            )
+
+        val nodes = LibraryIndexer.computeFolderNodes(SERVER, scenes).associateBy { it.path }
+
+        assertEquals("2", nodes.getValue("/a/").thumbnailSceneId)
+        assertEquals(50, nodes.getValue("/a/").thumbnailUpdatedAtEpochMs)
+        // The newest direct scene of /a/ is "5" (the only scene directly inside /a/).
+        assertEquals("5", nodes.getValue("/a/").newestDirectSceneId)
+    }
+
     private fun folderScene(
         sceneId: String,
         path: String,
         organized: Boolean = false,
-        screenshotUrl: String? = null,
         updatedAtEpochMs: Long = 0,
     ) = FolderScene(
         serverUrl = SERVER,
@@ -100,8 +117,6 @@ class LibraryIndexerCountTest {
         durationSeconds = null,
         rating100 = null,
         organized = organized,
-        screenshotUrl = screenshotUrl,
-        previewUrl = null,
         updatedAtEpochMs = updatedAtEpochMs,
     )
 

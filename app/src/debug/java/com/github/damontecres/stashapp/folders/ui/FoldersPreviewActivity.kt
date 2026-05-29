@@ -291,12 +291,7 @@ private class MockFolderTree {
                                 parentPath = parent,
                                 recursiveCount = recursiveCount,
                                 directCount = direct[childPath] ?: 0,
-                                thumbnailUrl =
-                                    if (recursiveCount > 0) {
-                                        "https://example.test/previews/${name.lowercase().replace(' ', '-')}.jpg"
-                                    } else {
-                                        null
-                                    },
+                                thumbnailSceneId = if (recursiveCount > 0) "1" else null,
                             ),
                     )
                 }

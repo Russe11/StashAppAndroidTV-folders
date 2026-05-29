@@ -16,8 +16,13 @@ import com.github.damontecres.stashapp.folders.data.FolderSyncState
 // New feed. v10 adds folder_scenes(serverUrl, updatedAtEpochMs) for the New
 // feed sort and drops three redundant single-column indexes (folder_scenes.path,
 // folder_scenes.parentPath, folders.parentPath) that are fully covered by their
-// serverUrl-prefixed composites. StashApplication wires those migrations into the
-// database builder; fallbackToDestructiveMigration() remains app-side as a safety net.
+// serverUrl-prefixed composites. v11 stops caching absolute media URLs: it drops
+// folder_scenes.screenshotUrl/previewUrl and folders.thumbnailUrl/newestDirectThumbnailUrl in
+// favour of scene-id columns (folders.thumbnailSceneId/thumbnailUpdatedAtEpochMs/
+// newestDirectSceneId), with URLs rebuilt at render time by SceneUrlBuilder; it clears
+// folder_sync_state to force a re-scan that repopulates the id columns. StashApplication wires
+// those migrations into the database builder; fallbackToDestructiveMigration() remains
+// app-side as a safety net.
 @Database(
     entities = [
         RecentSearchItem::class,
@@ -26,7 +31,7 @@ import com.github.damontecres.stashapp.folders.data.FolderSyncState
         FolderNode::class,
         FolderSyncState::class,
     ],
-    version = 10,
+    version = 11,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

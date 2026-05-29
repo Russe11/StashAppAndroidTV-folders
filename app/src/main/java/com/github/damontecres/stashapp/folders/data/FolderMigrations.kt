@@ -171,3 +171,109 @@ val MIGRATION_9_TO_10 =
             db.execSQL("DROP INDEX IF EXISTS `index_folders_parentPath`")
         }
     }
+
+/**
+ * Stops caching absolute media URLs. Before v11, `folder_scenes.screenshotUrl/previewUrl` and
+ * `folders.thumbnailUrl/newestDirectThumbnailUrl` stored server-rooted absolute URLs, which
+ * went stale after a server move and leaked one server's origin onto another's rows. The cache
+ * now stores only the **scene id** (+ that scene's `updated_at`); URLs are rebuilt at render
+ * time by `SceneUrlBuilder` against the current server root.
+ *
+ *   - `folder_scenes`: drop `screenshotUrl` / `previewUrl` (recreate the table without them,
+ *     copying the retained columns).
+ *   - `folders`: drop `thumbnailUrl` / `newestDirectThumbnailUrl`; add `thumbnailSceneId` +
+ *     `thumbnailUpdatedAtEpochMs` and `newestDirectSceneId`.
+ *
+ * The dropped URLs can't be reverse-mapped to scene ids, so the new id columns can't be
+ * back-filled here. We clear `folder_sync_state` instead, which makes the next sync run a fresh
+ * full scan that repopulates the id-based thumbnail columns from the server. (Scene rows are
+ * preserved so the user still sees a populated library while the re-scan runs.)
+ *
+ * The CREATE/ALTER set here must produce exactly the index/column set Room derives from the v11
+ * @Entity classes (see `app/schemas/...AppDatabase/11.json`).
+ *
+ * WIRING REQUIRED: pass to the database builder in `StashApplication.kt`:
+ *
+ *     .addMigrations(..., MIGRATION_9_TO_10, MIGRATION_10_TO_11)
+ */
+val MIGRATION_10_TO_11 =
+    object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // -- folder_scenes: drop the two URL columns by recreating the table. --
+            db.execSQL(
+                "CREATE TABLE `folder_scenes_new` (" +
+                    "`serverUrl` TEXT NOT NULL, " +
+                    "`sceneId` TEXT NOT NULL, " +
+                    "`path` TEXT NOT NULL, " +
+                    "`parentPath` TEXT NOT NULL, " +
+                    "`title` TEXT, " +
+                    "`durationSeconds` REAL, " +
+                    "`rating100` INTEGER, " +
+                    "`organized` INTEGER NOT NULL, " +
+                    "`tagIdsJson` TEXT NOT NULL DEFAULT '[]', " +
+                    "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`serverUrl`, `sceneId`))",
+            )
+            db.execSQL(
+                "INSERT INTO `folder_scenes_new` (" +
+                    "`serverUrl`, `sceneId`, `path`, `parentPath`, `title`, `durationSeconds`, " +
+                    "`rating100`, `organized`, `tagIdsJson`, `updatedAtEpochMs`) " +
+                    "SELECT `serverUrl`, `sceneId`, `path`, `parentPath`, `title`, `durationSeconds`, " +
+                    "`rating100`, `organized`, `tagIdsJson`, `updatedAtEpochMs` FROM `folder_scenes`",
+            )
+            db.execSQL("DROP TABLE `folder_scenes`")
+            db.execSQL("ALTER TABLE `folder_scenes_new` RENAME TO `folder_scenes`")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_parentPath` " +
+                    "ON `folder_scenes` (`serverUrl`, `parentPath`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_path` " +
+                    "ON `folder_scenes` (`serverUrl`, `path`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folder_scenes_serverUrl_updatedAtEpochMs` " +
+                    "ON `folder_scenes` (`serverUrl`, `updatedAtEpochMs`)",
+            )
+
+            // -- folders: drop the URL columns, add the id columns. --
+            db.execSQL(
+                "CREATE TABLE `folders_new` (" +
+                    "`serverUrl` TEXT NOT NULL, " +
+                    "`path` TEXT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`parentPath` TEXT NOT NULL, " +
+                    "`recursiveCount` INTEGER NOT NULL, " +
+                    "`directCount` INTEGER NOT NULL, " +
+                    "`thumbnailSceneId` TEXT, " +
+                    "`thumbnailUpdatedAtEpochMs` INTEGER NOT NULL DEFAULT 0, " +
+                    "`newestDirectUpdatedAtEpochMs` INTEGER NOT NULL DEFAULT 0, " +
+                    "`newestDirectSceneId` TEXT, " +
+                    "PRIMARY KEY(`serverUrl`, `path`))",
+            )
+            db.execSQL(
+                "INSERT INTO `folders_new` (" +
+                    "`serverUrl`, `path`, `name`, `parentPath`, `recursiveCount`, `directCount`, " +
+                    "`newestDirectUpdatedAtEpochMs`) " +
+                    "SELECT `serverUrl`, `path`, `name`, `parentPath`, `recursiveCount`, `directCount`, " +
+                    "`newestDirectUpdatedAtEpochMs` FROM `folders`",
+            )
+            db.execSQL("DROP TABLE `folders`")
+            db.execSQL("ALTER TABLE `folders_new` RENAME TO `folders`")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folders_serverUrl_parentPath` " +
+                    "ON `folders` (`serverUrl`, `parentPath`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_folders_serverUrl_name` " +
+                    "ON `folders` (`serverUrl`, `name`)",
+            )
+
+            // -- folder_sync_state: add the deletedSince resume cursor column. --
+            db.execSQL("ALTER TABLE `folder_sync_state` ADD COLUMN `deletedSinceCursor` TEXT DEFAULT NULL")
+
+            // The dropped URLs can't be reverse-mapped to scene ids; force a fresh full scan so
+            // the next sync repopulates the id-based thumbnail columns from the server.
+            db.execSQL("DELETE FROM `folder_sync_state`")
+        }
+    }

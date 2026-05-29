@@ -23,6 +23,7 @@ import com.github.damontecres.stashapp.folders.data.MIGRATION_6_TO_7
 import com.github.damontecres.stashapp.folders.data.MIGRATION_7_TO_8
 import com.github.damontecres.stashapp.folders.data.MIGRATION_8_TO_9
 import com.github.damontecres.stashapp.folders.data.MIGRATION_9_TO_10
+import com.github.damontecres.stashapp.folders.data.MIGRATION_10_TO_11
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.util.AppUpgradeHandler
 import com.github.damontecres.stashapp.util.QueryEngine
@@ -183,6 +184,7 @@ class StashApplication : Application() {
                     MIGRATION_7_TO_8,
                     MIGRATION_8_TO_9,
                     MIGRATION_9_TO_10,
+                    MIGRATION_10_TO_11,
                 ).fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

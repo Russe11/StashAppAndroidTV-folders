@@ -17,10 +17,16 @@ import androidx.room.Index
  *
  * `recursiveCount` counts scenes anywhere under this folder; `directCount` counts only
  * scenes whose `parentPath` exactly equals this `path`.
- * `thumbnailUrl` is materialised during sync so browsing a folder does not need to
- * run one recursive scene lookup per visible child row.
- * `newestDirectUpdatedAtEpochMs` / `newestDirectThumbnailUrl` summarize direct
- * folder videos only for the New feed.
+ *
+ * The representative thumbnail is stored as the **scene id** (+ its `updated_at`), not an
+ * absolute URL: `thumbnailSceneId` / `thumbnailUpdatedAtEpochMs` identify the scene whose
+ * screenshot represents this folder, and the URL is rebuilt at render time by
+ * [SceneUrlBuilder] against the current server root (so it survives a server move and never
+ * leaks another server's origin). Materialising the *id* during sync still avoids running one
+ * recursive scene lookup per visible child row.
+ *
+ * `newestDirectUpdatedAtEpochMs` / `newestDirectSceneId` likewise identify the newest scene
+ * directly inside this folder for the New feed, with its thumbnail rebuilt at render time.
  */
 @Entity(
     tableName = "folders",
@@ -42,8 +48,12 @@ data class FolderNode(
     val parentPath: String,
     val recursiveCount: Int,
     val directCount: Int,
-    val thumbnailUrl: String?,
+    // Representative thumbnail scene (id + its updated_at), rebuilt to a URL at render time.
+    val thumbnailSceneId: String? = null,
+    @ColumnInfo(defaultValue = "0")
+    val thumbnailUpdatedAtEpochMs: Long = 0,
     @ColumnInfo(defaultValue = "0")
     val newestDirectUpdatedAtEpochMs: Long = 0,
-    val newestDirectThumbnailUrl: String? = null,
+    // Newest-direct scene id (its updated_at is newestDirectUpdatedAtEpochMs), rebuilt at render.
+    val newestDirectSceneId: String? = null,
 )

@@ -75,8 +75,9 @@ interface FolderDao {
      */
     @Query(
         "SELECT f.serverUrl, f.path, f.name, f.parentPath, f.recursiveCount, f.directCount, " +
-            "CASE WHEN :includeThumbnails THEN f.thumbnailUrl ELSE NULL END AS thumbnailUrl, " +
-            "f.newestDirectUpdatedAtEpochMs, f.newestDirectThumbnailUrl, " +
+            "CASE WHEN :includeThumbnails THEN f.thumbnailSceneId ELSE NULL END AS thumbnailSceneId, " +
+            "f.thumbnailUpdatedAtEpochMs, " +
+            "f.newestDirectUpdatedAtEpochMs, f.newestDirectSceneId, " +
             "(SELECT COUNT(*) FROM folders c WHERE c.serverUrl = f.serverUrl AND c.parentPath = f.path) AS childFolderCount " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.parentPath = :parentPath " +
@@ -136,13 +137,12 @@ interface FolderDao {
      */
     @Query(
         "SELECT serverUrl, 'scene' AS itemType, sceneId AS itemId, path, parentPath, title, " +
-            "screenshotUrl AS thumbnailUrl, previewUrl, updatedAtEpochMs, 0 AS directCount " +
+            "sceneId AS thumbnailSceneId, updatedAtEpochMs, 0 AS directCount " +
             "FROM folder_scenes " +
             "WHERE serverUrl = :serverUrl " +
             "UNION ALL " +
             "SELECT f.serverUrl, 'folder' AS itemType, f.path AS itemId, f.path, f.parentPath, f.name AS title, " +
-            "f.newestDirectThumbnailUrl AS thumbnailUrl, " +
-            "NULL AS previewUrl, " +
+            "f.newestDirectSceneId AS thumbnailSceneId, " +
             "f.newestDirectUpdatedAtEpochMs AS updatedAtEpochMs, " +
             "f.directCount " +
             "FROM folders f " +
@@ -153,7 +153,7 @@ interface FolderDao {
 
     @Query(
         "SELECT serverUrl, 'scene' AS itemType, sceneId AS itemId, path, parentPath, title, " +
-            "screenshotUrl AS thumbnailUrl, previewUrl, updatedAtEpochMs, 0 AS directCount " +
+            "sceneId AS thumbnailSceneId, updatedAtEpochMs, 0 AS directCount " +
             "FROM folder_scenes " +
             "WHERE serverUrl = :serverUrl " +
             "ORDER BY updatedAtEpochMs DESC, path COLLATE NOCASE ASC " +
@@ -173,14 +173,14 @@ interface FolderDao {
     @Query(
         "SELECT * FROM (" +
             "SELECT f.serverUrl, 'folder' AS itemType, f.path AS itemId, f.path, f.parentPath, f.name AS title, " +
-            "f.thumbnailUrl AS thumbnailUrl, NULL AS previewUrl, " +
-            "f.newestDirectUpdatedAtEpochMs AS updatedAtEpochMs, " +
+            "f.thumbnailSceneId AS thumbnailSceneId, " +
+            "f.thumbnailUpdatedAtEpochMs AS updatedAtEpochMs, " +
             "f.directCount " +
             "FROM folders f " +
             "WHERE f.serverUrl = :serverUrl AND f.parentPath = :parentPath " +
             "UNION ALL " +
             "SELECT serverUrl, 'scene' AS itemType, sceneId AS itemId, path, parentPath, title, " +
-            "screenshotUrl AS thumbnailUrl, previewUrl, updatedAtEpochMs, 0 AS directCount " +
+            "sceneId AS thumbnailSceneId, updatedAtEpochMs, 0 AS directCount " +
             "FROM folder_scenes " +
             "WHERE serverUrl = :serverUrl AND parentPath = :parentPath" +
             ") " +
@@ -202,4 +202,29 @@ interface FolderDao {
 
     @Query("SELECT * FROM folder_scenes WHERE serverUrl = :serverUrl ORDER BY path COLLATE NOCASE ASC")
     suspend fun allScenesForServer(serverUrl: String): List<FolderScene>
+
+    /**
+     * Every cached scene id for a server. Backs the `deletedSince` full-resync reconcile: when
+     * the server reports the stored cursor is pruned, the indexer diffs this set against the
+     * server's live id set and removes the rows the server no longer has.
+     */
+    @Query("SELECT sceneId FROM folder_scenes WHERE serverUrl = :serverUrl")
+    suspend fun allSceneIdsForServer(serverUrl: String): List<String>
+
+    /**
+     * Remove the given scene ids for a server (the incremental `deletedSince` prune). SQLite
+     * caps host parameters at 999, so the indexer chunks large id lists before calling this.
+     */
+    @Query("DELETE FROM folder_scenes WHERE serverUrl = :serverUrl AND sceneId IN (:sceneIds)")
+    suspend fun deleteScenesByIds(
+        serverUrl: String,
+        sceneIds: List<String>,
+    )
+
+    /** Persist the opaque `deletedSince` resume cursor without touching other sync-state fields. */
+    @Query("UPDATE folder_sync_state SET deletedSinceCursor = :cursor WHERE serverUrl = :serverUrl")
+    suspend fun updateDeletedSinceCursor(
+        serverUrl: String,
+        cursor: String?,
+    )
 }
