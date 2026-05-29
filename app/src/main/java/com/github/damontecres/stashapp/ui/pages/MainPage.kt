@@ -8,15 +8,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,6 +52,8 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.Text
@@ -71,7 +78,10 @@ import com.github.damontecres.stashapp.api.type.IntCriterionInput
 import com.github.damontecres.stashapp.api.type.MultiCriterionInput
 import com.github.damontecres.stashapp.api.type.SceneFilterType
 import com.github.damontecres.stashapp.api.type.SortDirectionEnum
+import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.FilterAndPosition
+import com.github.damontecres.stashapp.navigation.NavigationManager
+import com.github.damontecres.stashapp.playback.PlaybackMode
 import com.github.damontecres.stashapp.proto.StashPreferences
 import com.github.damontecres.stashapp.proto.UpdatePreferences
 import com.github.damontecres.stashapp.data.DataType
@@ -84,6 +94,7 @@ import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.cards.StashCard
 import com.github.damontecres.stashapp.ui.cards.ViewAllCard
+import com.github.damontecres.stashapp.ui.compat.Button
 import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.LongClicker
@@ -102,6 +113,7 @@ import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.RecommendationEngine
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.SurpriseMePicker
 import com.github.damontecres.stashapp.util.UpdateChecker
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import com.github.damontecres.stashapp.util.launchIO
@@ -252,6 +264,50 @@ class MainPageViewModel : ViewModel() {
         )
     }
 
+    /** True while a Surprise Me fetch is in flight, so the UI can disable/spin the control. */
+    private val _surpriseMeLoading = MutableLiveData(false)
+    val surpriseMeLoading: LiveData<Boolean> = _surpriseMeLoading
+
+    /**
+     * "Surprise Me": fetch a small page of randomly-sorted scenes from the server and open one of
+     * them for playback — low-friction couch discovery.
+     *
+     * The randomness is server-sourced: we request [SortOption.Random], which [QueryEngine]
+     * resolves to a fresh `random_<seed>` sort on every call, so each press reshuffles the
+     * candidate pool. The choice among the returned candidates is the pure, unit-tested
+     * [SurpriseMePicker] (which also biases toward not-yet-watched scenes). Pass a [sceneFilter]
+     * to respect an active filter (e.g. from a filtered scene list); null means the whole library.
+     */
+    fun surpriseMe(
+        server: StashServer,
+        navigationManager: NavigationManager,
+        sceneFilter: SceneFilterType? = null,
+    ) {
+        if (_surpriseMeLoading.value == true) return
+        _surpriseMeLoading.value = true
+        viewModelScope.launch(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
+            try {
+                val candidates =
+                    withContext(Dispatchers.IO) {
+                        QueryEngine(server).findScenes(
+                            findFilter =
+                                StashFindFilter(SortAndDirection.random())
+                                    .toFindFilterType(1, SURPRISE_ME_CANDIDATES),
+                            sceneFilter = sceneFilter,
+                            useRandom = true,
+                        )
+                    }
+                val pick = SurpriseMePicker.pick(candidates) ?: return@launch
+                val destination =
+                    getPlayDestinationForItem(server, pick, null)
+                        ?: Destination.Playback(pick.id, 0L, PlaybackMode.Choose)
+                navigationManager.navigate(destination)
+            } finally {
+                _surpriseMeLoading.value = false
+            }
+        }
+    }
+
     fun checkForUpdate(
         context: Context,
         prefs: UpdatePreferences,
@@ -337,6 +393,13 @@ private fun homeNewestVideosFilter(name: String): FilterArgs =
 
 /** How many recently-played scenes to sample when building the recommendation profile. */
 private const val RECOMMENDED_SEED_SIZE = 50
+
+/**
+ * Size of the randomly-sorted candidate pool a Surprise Me press fetches. Small (so the query is
+ * cheap and the server does the shuffling) but >1 so [SurpriseMePicker]'s prefer-unwatched bias
+ * has something to choose from.
+ */
+private const val SURPRISE_ME_CANDIDATES = 25
 
 /**
  * Fraction of a scene's duration past which a saved resume position is treated as "finished"
@@ -449,6 +512,8 @@ fun MainPage(
 
     val frontPageRows = viewModel.frontPageRows // .observeAsState(listOf())
     val serverStats by viewModel.serverStats.observeAsState()
+    val surpriseMeLoading by viewModel.surpriseMeLoading.observeAsState(false)
+    val navigationManager = LocalGlobalContext.current.navigationManager
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -476,6 +541,11 @@ fun MainPage(
             rows = frontPageRows,
             itemOnClick = itemOnClick,
             longClicker = longClicker,
+            surpriseMeLoading = surpriseMeLoading,
+            // No sceneFilter: the home button surprises across the whole library. A filtered
+            // scene list can call viewModel.surpriseMe(server, nav, sceneFilter) to respect its
+            // active filter.
+            onSurpriseMe = { viewModel.surpriseMe(server, navigationManager) },
         )
     }
 }
@@ -490,6 +560,8 @@ fun HomePage(
     itemOnClick: ItemOnClicker<Any>,
     longClicker: LongClicker<Any>,
     modifier: Modifier = Modifier,
+    surpriseMeLoading: Boolean = false,
+    onSurpriseMe: () -> Unit = {},
 ) {
     var focusedItem by remember { mutableStateOf<Any?>(null) }
     val focusRequester = remember { FocusRequester() }
@@ -587,6 +659,12 @@ fun HomePage(
                 )
             }
 
+            SurpriseMeButton(
+                loading = surpriseMeLoading,
+                onClick = onSurpriseMe,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+            )
+
             LazyColumn(
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -623,6 +701,40 @@ fun HomePage(
                 }
             }
         }
+    }
+}
+
+/**
+ * The home-screen "Surprise Me" control: one press fetches a random scene and starts it. While a
+ * pick is in flight the button is disabled and shows an inline spinner so a couch user gets
+ * immediate feedback and can't fire overlapping fetches.
+ */
+@Composable
+fun SurpriseMeButton(
+    loading: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = !loading,
+        modifier = modifier,
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = LocalContentColor.current,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = stringResource(R.string.home_surprise_me))
     }
 }
 
