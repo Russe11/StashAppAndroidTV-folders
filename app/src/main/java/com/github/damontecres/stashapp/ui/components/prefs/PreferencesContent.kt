@@ -74,6 +74,7 @@ val basicPreferences =
             R.string.basic_interface,
             listOf(
                 StashPreference.PinCode,
+                StashPreference.RequireBiometric,
                 StashPreference.ReadOnlyMode,
                 StashPreference.CardSize,
                 StashPreference.PlayVideoPreviews,

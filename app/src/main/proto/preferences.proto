@@ -7,6 +7,9 @@ message PinPreferences {
   string pin = 1;
   string read_only_pin = 2;
   bool auto_submit = 3;
+  // When true and an app PIN is set, the app-entry gate also requires a
+  // device biometric / credential unlock (BiometricPrompt) before unlocking.
+  bool require_biometric = 4;
 }
 
 enum ThemeStyle {

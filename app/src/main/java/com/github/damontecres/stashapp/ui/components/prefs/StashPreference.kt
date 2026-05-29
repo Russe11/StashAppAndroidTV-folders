@@ -127,6 +127,18 @@ sealed interface StashPreference<T> {
                     prefs.updatePinPreferences { pin = value }
                 },
             )
+        val RequireBiometric =
+            StashSwitchPreference(
+                title = R.string.require_biometric,
+                prefKey = R.string.pref_key_require_biometric,
+                defaultValue = false,
+                getter = { it.pinPreferences.requireBiometric },
+                setter = { prefs, value ->
+                    prefs.updatePinPreferences { requireBiometric = value }
+                },
+                summaryOn = R.string.require_biometric_summary_on,
+                summaryOff = R.string.require_biometric_summary_off,
+            )
         val CardSize =
             StashChoicePreference<Int>(
                 title = R.string.card_size_title,

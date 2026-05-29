@@ -175,6 +175,11 @@
     <string name="playback_finished_behavior">Playback finished behavior</string>
     <string name="auto_submit_pin">Auto submit PIN</string>
     <string name="auto_submit_pin_summary">Submit PIN automatically when typed</string>
+    <string name="require_biometric">Require biometric unlock</string>
+    <string name="require_biometric_summary_on">Use Face/fingerprint or device PIN to unlock the app (requires an app PIN)</string>
+    <string name="require_biometric_summary_off">Unlock with the app PIN only</string>
+    <string name="biometric_prompt_title">Unlock Stash</string>
+    <string name="biometric_prompt_subtitle">Verify it\'s you to continue</string>
     <string name="current_server">Current server</string>
     <string name="pin_code">Protect with PIN code</string>
     <string name="card_size_title">Card size</string>
