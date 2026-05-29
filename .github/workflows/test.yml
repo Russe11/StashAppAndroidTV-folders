@@ -1,0 +1,40 @@
+name: Tests
+
+# Runs unit tests on every branch push so the active fork branch
+# (e.g. perf/card-recomposition) is gated. main.yml is a release-publishing
+# build and pr.yml only runs on pull_request, so direct pushes to fork
+# branches were previously untested. This workflow is build/test only — it
+# never publishes a release or signs an APK.
+
+on:
+  push:
+    branches:
+      - '**'
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4g -XX:MaxMetaspaceSize=512m'"
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # tags needed for the version string
+          submodules: true # schema submodule needed to codegen/build
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Build + unit tests
+        run: ./gradlew clean assembleDebug testDebugUnitTest --no-daemon
+        env:
+          ORG_GRADLE_PROJECT_WholphinExtensionsUsername: "${{ secrets.EXTENSIONS_USERNAME }}"
+          ORG_GRADLE_PROJECT_WholphinExtensionsPassword: "${{ secrets.EXTENSIONS_PASSWORD }}"
