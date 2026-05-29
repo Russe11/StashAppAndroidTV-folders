@@ -75,6 +75,7 @@ val basicPreferences =
             listOf(
                 StashPreference.PinCode,
                 StashPreference.RequireBiometric,
+                StashPreference.BlockScreenshots,
                 StashPreference.ReadOnlyMode,
                 StashPreference.CardSize,
                 StashPreference.PlayVideoPreviews,

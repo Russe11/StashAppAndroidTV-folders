@@ -139,6 +139,19 @@ sealed interface StashPreference<T> {
                 summaryOn = R.string.require_biometric_summary_on,
                 summaryOff = R.string.require_biometric_summary_off,
             )
+        val BlockScreenshots =
+            StashSwitchPreference(
+                title = R.string.block_screenshots,
+                prefKey = R.string.pref_key_block_screenshots,
+                // Privacy-first: secure the window by default for an adult-media viewer.
+                defaultValue = true,
+                getter = { it.pinPreferences.blockScreenshots },
+                setter = { prefs, value ->
+                    prefs.updatePinPreferences { blockScreenshots = value }
+                },
+                summaryOn = R.string.block_screenshots_summary_on,
+                summaryOff = R.string.block_screenshots_summary_off,
+            )
         val CardSize =
             StashChoicePreference<Int>(
                 title = R.string.card_size_title,

@@ -29,6 +29,7 @@ import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
 import com.github.damontecres.stashapp.navigation.NavigationManagerLeanback
 import com.github.damontecres.stashapp.util.KeyEventDispatcher
 import com.github.damontecres.stashapp.util.LocalDebugSetup
+import com.github.damontecres.stashapp.util.ScreenshotPrivacy
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.animateToInvisible
 import com.github.damontecres.stashapp.util.composeEnabled
@@ -80,10 +81,7 @@ class RootActivity :
             TAG,
             "onCreate: savedInstanceState==null:${savedInstanceState == null}, currentFragment==null:${currentFragment == null}",
         )
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
+        applyScreenshotPrivacy()
 
         val appHasPin = appHasPin()
 
@@ -235,6 +233,30 @@ class RootActivity :
             .getDefaultSharedPreferences(this)
             .getString("pinCode", "")
             .isNotNullOrBlank()
+    }
+
+    /**
+     * Set or clear [WindowManager.LayoutParams.FLAG_SECURE] on the window based on the
+     * "Block screenshots & hide in recents" preference. `FLAG_SECURE` blocks screenshots, screen
+     * recording and cast/mirror capture, and blanks the recents/app-switcher thumbnail.
+     *
+     * Privacy-first default: when the user has never set the preference, the window is secured
+     * (see [ScreenshotPrivacy.shouldSecureWindow]). Called from [onCreate]; because the flag is a
+     * window attribute, toggling the preference takes effect on the next launch of this activity.
+     */
+    private fun applyScreenshotPrivacy() {
+        val key = getString(R.string.pref_key_block_screenshots)
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        // null = no explicit choice yet -> ScreenshotPrivacy applies the privacy-first default.
+        val stored = if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+        if (ScreenshotPrivacy.shouldSecureWindow(stored)) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     // Delegate key events to the current fragment

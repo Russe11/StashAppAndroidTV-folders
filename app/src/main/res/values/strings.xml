@@ -178,6 +178,9 @@
     <string name="require_biometric">Require biometric unlock</string>
     <string name="require_biometric_summary_on">Use Face/fingerprint or device PIN to unlock the app (requires an app PIN)</string>
     <string name="require_biometric_summary_off">Unlock with the app PIN only</string>
+    <string name="block_screenshots">Block screenshots &amp; hide in recents</string>
+    <string name="block_screenshots_summary_on">Screenshots, screen recording and casting are blocked, and the app is blanked in the recents/app-switcher (takes effect on next launch)</string>
+    <string name="block_screenshots_summary_off">Screenshots and the recents preview are allowed (takes effect on next launch)</string>
     <string name="biometric_prompt_title">Unlock Stash</string>
     <string name="biometric_prompt_subtitle">Verify it\'s you to continue</string>
     <string name="current_server">Current server</string>

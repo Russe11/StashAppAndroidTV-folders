@@ -10,6 +10,12 @@ message PinPreferences {
   // When true and an app PIN is set, the app-entry gate also requires a
   // device biometric / credential unlock (BiometricPrompt) before unlocking.
   bool require_biometric = 4;
+  // When true, set WindowManager.LayoutParams.FLAG_SECURE on the host window:
+  // blocks screenshots / screen recording / cast-mirroring capture and blanks
+  // the recents (app-switcher) thumbnail. Privacy-first default for an
+  // adult-media viewer, so this is ON unless explicitly disabled (see
+  // ScreenshotPrivacy.shouldSecureWindow for the default semantics).
+  bool block_screenshots = 5;
 }
 
 enum ThemeStyle {
