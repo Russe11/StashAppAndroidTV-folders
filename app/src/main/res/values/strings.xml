@@ -43,6 +43,8 @@
     <string name="home">Home</string>
     <string name="folders">Folders</string>
     <string name="home_newest_videos">Newest videos</string>
+    <string name="home_continue_watching">Continue watching</string>
+    <string name="home_recommended">Recommended for you</string>
     <string name="new_items">New</string>
     <string name="new_empty">No new items yet — indexing in progress.</string>
     <string name="new_folder_type">Folder</string>

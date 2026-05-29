@@ -55,6 +55,7 @@ import coil3.request.ImageRequest
 import coil3.request.transitionFactory
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.R
+import com.apollographql.apollo.api.Optional
 import com.github.damontecres.stashapp.api.StatisticsQuery
 import com.github.damontecres.stashapp.api.fragment.SlimSceneData
 import com.github.damontecres.stashapp.api.fragment.GalleryData
@@ -64,6 +65,11 @@ import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.PerformerData
 import com.github.damontecres.stashapp.api.fragment.StudioData
 import com.github.damontecres.stashapp.api.fragment.TagData
+import com.github.damontecres.stashapp.api.type.CriterionModifier
+import com.github.damontecres.stashapp.api.type.HierarchicalMultiCriterionInput
+import com.github.damontecres.stashapp.api.type.IntCriterionInput
+import com.github.damontecres.stashapp.api.type.MultiCriterionInput
+import com.github.damontecres.stashapp.api.type.SceneFilterType
 import com.github.damontecres.stashapp.api.type.SortDirectionEnum
 import com.github.damontecres.stashapp.navigation.FilterAndPosition
 import com.github.damontecres.stashapp.proto.StashPreferences
@@ -93,6 +99,7 @@ import com.github.damontecres.stashapp.ui.util.ifElse
 import com.github.damontecres.stashapp.util.FrontPageParser
 import com.github.damontecres.stashapp.util.LoggingCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.QueryEngine
+import com.github.damontecres.stashapp.util.RecommendationEngine
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.UpdateChecker
@@ -123,13 +130,14 @@ class MainPageViewModel : ViewModel() {
         prefs: StashPreferences,
     ) {
         this.server = server
+        val pageSize = prefs.searchPreferences.maxResults
         viewModelScope.launch(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
             val rowTitle = context.getString(R.string.home_newest_videos)
             val newestRows =
                 withContext(Dispatchers.IO) {
                     folderDao.newestSceneItems(
                         serverUrl = server.url,
-                        limit = prefs.searchPreferences.maxResults,
+                        limit = pageSize,
                     )
                 }
             frontPageRows.clear()
@@ -141,6 +149,107 @@ class MainPageViewModel : ViewModel() {
                 ),
             )
         }
+        // Continue Watching + Recommended are derived from engagement metadata on the server,
+        // so they lazily append to the front-page rows as each query resolves (the newest-videos
+        // row above renders immediately from the local Room cache).
+        loadDiscoveryRows(context, server, pageSize)
+    }
+
+    /**
+     * Fetch the Continue Watching and Recommended rows and append them to [frontPageRows].
+     *
+     * Both run off a single QueryEngine and use only existing Apollo fields (resume_time,
+     * play_count, last_played_at, tags, performers). The recommendation heuristic itself lives in
+     * [RecommendationEngine] (pure + unit-tested); this method just supplies it with local data.
+     */
+    private fun loadDiscoveryRows(
+        context: Context,
+        server: StashServer,
+        pageSize: Int,
+    ) {
+        viewModelScope.launch(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
+            val queryEngine = QueryEngine(server)
+
+            // ---- Continue Watching ----
+            val continueTitle = context.getString(R.string.home_continue_watching)
+            val continueFilter = continueWatchingFilter(continueTitle)
+            val continueScenes =
+                withContext(Dispatchers.IO) {
+                    queryEngine
+                        .findScenes(
+                            findFilter = continueFilter.findFilter?.toFindFilterType(1, pageSize),
+                            sceneFilter = continueFilter.objectFilter as SceneFilterType?,
+                            useRandom = false,
+                        ).filterNot(::isEffectivelyFinished)
+                }
+            if (continueScenes.isNotEmpty()) {
+                frontPageRows.add(
+                    FrontPageParser.FrontPageRow.Success(
+                        name = continueTitle,
+                        filter = continueFilter,
+                        data = continueScenes,
+                    ),
+                )
+            }
+
+            // ---- Recommended (local-metadata heuristic) ----
+            val recommended =
+                withContext(Dispatchers.IO) {
+                    buildRecommendedRow(context, queryEngine, continueScenes, pageSize)
+                }
+            if (recommended != null) {
+                frontPageRows.add(recommended)
+            }
+        }
+    }
+
+    /**
+     * Build the Recommended row using the [RecommendationEngine] heuristic, or null if there is
+     * not enough local engagement data to recommend anything yet.
+     */
+    private suspend fun buildRecommendedRow(
+        context: Context,
+        queryEngine: QueryEngine,
+        continueScenes: List<SlimSceneData>,
+        pageSize: Int,
+    ): FrontPageParser.FrontPageRow.Success? {
+        // Seed: the user's most-recently-played scenes (the basis for "more of what you watch").
+        val recentlyPlayed =
+            queryEngine.findScenes(
+                findFilter =
+                    StashFindFilter(
+                        SortAndDirection(SortOption.LastPlayedAt, SortDirectionEnum.DESC),
+                    ).toFindFilterType(1, RECOMMENDED_SEED_SIZE),
+                sceneFilter = playedScenesFilter(),
+                useRandom = false,
+            )
+        val profile = RecommendationEngine.buildProfile(recentlyPlayed)
+        if (profile.isEmpty) return null
+
+        val recommendedFilter = recommendedFilter(context, profile)
+        // Over-fetch a candidate pool so client-side ranking + dedup still fills the row.
+        val candidates =
+            queryEngine.findScenes(
+                findFilter = recommendedFilter.findFilter?.toFindFilterType(1, pageSize * 3),
+                sceneFilter = recommendedFilter.objectFilter as SceneFilterType?,
+                useRandom = false,
+            )
+        // Never recommend something already watched or already in Continue Watching.
+        val exclude =
+            (recentlyPlayed.map { it.id } + continueScenes.map { it.id }).toSet()
+        val ranked =
+            RecommendationEngine.rankRecommendations(
+                candidates = candidates,
+                profile = profile,
+                excludeSceneIds = exclude,
+                limit = pageSize,
+            )
+        if (ranked.isEmpty()) return null
+        return FrontPageParser.FrontPageRow.Success(
+            name = context.getString(R.string.home_recommended),
+            filter = recommendedFilter,
+            data = ranked,
+        )
     }
 
     fun checkForUpdate(
@@ -223,6 +332,104 @@ private fun homeNewestVideosFilter(name: String): FilterArgs =
                     SortOption.UpdatedAt,
                     SortDirectionEnum.DESC,
                 ),
+            ),
+    )
+
+/** How many recently-played scenes to sample when building the recommendation profile. */
+private const val RECOMMENDED_SEED_SIZE = 50
+
+/**
+ * Fraction of a scene's duration past which a saved resume position is treated as "finished"
+ * (so a scene the user watched to the end doesn't clutter Continue Watching). Combined with an
+ * absolute end-margin so very long scenes don't need the full last few minutes watched.
+ */
+private const val FINISHED_FRACTION = 0.95
+private const val FINISHED_END_MARGIN_SECONDS = 30.0
+
+/**
+ * Continue Watching: scenes with a saved resume position, most-recently-played first.
+ *
+ * The `resume_time > 0` predicate is pushed to the server; the "effectively finished" trim
+ * (resume near the end of the file) is done client-side in [isEffectivelyFinished] because the
+ * server can't compare resume_time against per-file duration in a single criterion.
+ */
+private fun continueWatchingFilter(name: String): FilterArgs =
+    FilterArgs(
+        dataType = DataType.SCENE,
+        name = name,
+        findFilter =
+            StashFindFilter(
+                SortAndDirection(SortOption.LastPlayedAt, SortDirectionEnum.DESC),
+            ),
+        objectFilter =
+            SceneFilterType(
+                resume_time =
+                    Optional.present(
+                        IntCriterionInput(value = 0, modifier = CriterionModifier.GREATER_THAN),
+                    ),
+            ),
+    )
+
+/** A scene is hidden from Continue Watching once its resume position is near the end. */
+internal fun isEffectivelyFinished(scene: SlimSceneData): Boolean {
+    val resume = scene.resume_time ?: return false
+    if (resume <= 0.0) return true
+    val duration =
+        scene.files.firstOrNull()?.videoFile?.duration?.takeIf { it > 0.0 } ?: return false
+    return resume >= duration * FINISHED_FRACTION ||
+        resume >= duration - FINISHED_END_MARGIN_SECONDS
+}
+
+/** Scenes the user has actually played at least once — the seed for recommendations. */
+private fun playedScenesFilter(): SceneFilterType =
+    SceneFilterType(
+        play_count =
+            Optional.present(
+                IntCriterionInput(value = 0, modifier = CriterionModifier.GREATER_THAN),
+            ),
+    )
+
+/**
+ * Recommended: candidate pool of scenes that share the user's top tags or performers, highest
+ * rated first. The final affinity ranking + dedup against already-watched scenes happens
+ * client-side in [RecommendationEngine.rankRecommendations].
+ */
+private fun recommendedFilter(
+    context: Context,
+    profile: RecommendationEngine.AffinityProfile,
+): FilterArgs =
+    FilterArgs(
+        dataType = DataType.SCENE,
+        name = context.getString(R.string.home_recommended),
+        findFilter =
+            StashFindFilter(
+                SortAndDirection(SortOption.Rating, SortDirectionEnum.DESC),
+            ),
+        objectFilter =
+            SceneFilterType(
+                tags =
+                    if (profile.tagIds.isNotEmpty()) {
+                        Optional.present(
+                            HierarchicalMultiCriterionInput(
+                                value = Optional.present(profile.tagIds),
+                                modifier = CriterionModifier.INCLUDES,
+                                depth = Optional.present(0),
+                            ),
+                        )
+                    } else {
+                        Optional.Absent
+                    },
+                performers =
+                    if (profile.performerIds.isNotEmpty()) {
+                        Optional.present(
+                            MultiCriterionInput(
+                                value = Optional.present(profile.performerIds),
+                                modifier = CriterionModifier.INCLUDES,
+                            ),
+                        )
+                    } else {
+                        Optional.Absent
+                    },
             ),
     )
 
