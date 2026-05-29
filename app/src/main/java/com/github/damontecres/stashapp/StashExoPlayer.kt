@@ -26,7 +26,6 @@ import com.github.damontecres.stashapp.util.Constants
 import com.github.damontecres.stashapp.util.SkipParams
 import com.github.damontecres.stashapp.util.StashClient
 import com.github.damontecres.stashapp.util.StashServer
-import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import com.github.damontecres.wholphin.mpv.MpvPlayer
 import timber.log.Timber
 
@@ -127,8 +126,11 @@ class StashExoPlayer private constructor() {
                                 .setReadTimeoutMs(30_000)
                                 .setUserAgent(StashClient.createUserAgent(context))
                                 .apply {
-                                    if (server.apiKey.isNotNullOrBlank()) {
-                                        setDefaultRequestProperties(mapOf(Constants.STASH_API_HEADER to server.apiKey))
+                                    // Trim via the shared normalizer so a key with trailing
+                                    // whitespace doesn't 401 direct-play (was: raw server.apiKey).
+                                    val apiKey = StashServer.normalizeApiKey(server.apiKey)
+                                    if (apiKey != null) {
+                                        setDefaultRequestProperties(mapOf(Constants.STASH_API_HEADER to apiKey))
                                     }
                                 }
                         }

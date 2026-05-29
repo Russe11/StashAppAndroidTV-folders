@@ -158,10 +158,9 @@ fun createGlideUrl(
     url: String,
     context: Context,
 ): GlideUrl {
-    val apiKey =
-        PreferenceManager
-            .getDefaultSharedPreferences(context)
-            .getString("stashApiKey", "")
+    // Read from the encrypted store (migrating from the legacy plaintext entry if needed)
+    // rather than plaintext default prefs, so the full-access key is never on-disk in clear.
+    val apiKey = StashServer.getStoredApiKey(context)
     return createGlideUrl(url, apiKey)
 }
 

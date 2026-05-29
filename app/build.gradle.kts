@@ -332,6 +332,7 @@ dependencies {
     implementation(kotlin("reflect"))
 
     implementation(libs.androidx.preference.ktx)
+    implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
 

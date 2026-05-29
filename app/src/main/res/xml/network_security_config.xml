@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network security policy for the Stash TV viewer.
+
+  base-config:
+    - cleartextTrafficPermitted="true": Stash servers are very commonly reached over
+      plain http:// on a LAN, so cleartext must stay allowed (this replaces the blanket
+      android:usesCleartextTraffic on <application>).
+    - trust-anchors include the system store AND user-installed CAs: a user who runs an
+      HTTPS Stash behind their own CA can install that CA on the device and be trusted
+      normally, with full chain + hostname verification, instead of resorting to the
+      "trust all certs" toggle.
+
+  The legacy "trust all certs" opt-in (for a bare self-signed leaf with no installed CA)
+  is handled in StashClient.applySslConfig, which now keeps hostname verification on.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

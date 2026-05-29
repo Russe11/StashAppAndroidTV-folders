@@ -80,6 +80,10 @@
     <string name="sort_by">Sort By</string>
     <string name="enter_pin">Enter PIN</string>
     <string name="enter_settings_pin">Enter Settings PIN</string>
+    <string name="delete_show_file_option">Also delete files from disk…</string>
+    <string name="delete_files_permanent_warning">Deleting files removes them permanently from disk. This cannot be undone.</string>
+    <string name="delete_enter_pin_to_confirm">Enter your PIN to permanently delete files from disk</string>
+    <string name="delete_confirm_files">Permanently delete files</string>
     <string name="force_direct">Force direct</string>
     <string name="unsupported">unsupported</string>
     <string name="results">Results</string>

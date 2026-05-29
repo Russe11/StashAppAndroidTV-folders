@@ -150,6 +150,14 @@ class StashApplication : Application() {
             }
         }
 
+        // Move any pre-existing plaintext server URL/API-key entries into the
+        // encrypted store and strip them from plaintext default prefs.
+        try {
+            StashServer.migratePlaintextSecrets(this)
+        } catch (ex: Exception) {
+            Log.e(TAG, "Failed to migrate plaintext secrets to encrypted store", ex)
+        }
+
         setupDB()
         // Folders destination: install the indexer host so its UI bridge can
         // observe sync progress and dispatch force-resync as soon as the user

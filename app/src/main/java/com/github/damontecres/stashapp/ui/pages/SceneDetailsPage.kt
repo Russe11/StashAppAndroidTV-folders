@@ -669,6 +669,7 @@ fun SceneDetails(
             dataType = DataType.SCENE,
             name = scene.titleOrFilename ?: "",
             files = scene.files.map { it.videoFile.path },
+            uiConfig = uiConfig,
             onDeleteConfirm = { deleteFiles, deleteGenerated ->
                 showDeleteDialog = false
                 onSceneDelete.invoke(deleteFiles, deleteGenerated)

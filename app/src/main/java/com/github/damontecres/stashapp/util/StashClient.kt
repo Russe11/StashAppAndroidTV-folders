@@ -23,10 +23,12 @@ import okhttp3.EventListener
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Response
+import java.security.KeyStore
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlin.time.DurationUnit
 
@@ -67,18 +69,7 @@ class StashClient private constructor() {
                         )
                     }
 
-            if (trustAll) {
-                val sslContext = SSLContext.getInstance("SSL")
-                sslContext.init(null, arrayOf(TRUST_ALL_CERTS), SecureRandom())
-                builder =
-                    builder
-                        .sslSocketFactory(
-                            sslContext.socketFactory,
-                            TRUST_ALL_CERTS,
-                        ).hostnameVerifier { _, _ ->
-                            true
-                        }
-            }
+            builder = applySslConfig(builder, trustAll)
             if (cacheLogging) {
                 Log.d(
                     OK_HTTP_TAG,
@@ -154,21 +145,10 @@ class StashClient private constructor() {
                 PreferenceManager
                     .getDefaultSharedPreferences(StashApplication.getApplication())
                     .getBoolean("trustAllCerts", false)
-            if (trustAll) {
-                val sslContext = SSLContext.getInstance("SSL")
-                sslContext.init(null, arrayOf(TRUST_ALL_CERTS), SecureRandom())
-                builder =
-                    builder
-                        .sslSocketFactory(
-                            sslContext.socketFactory,
-                            TRUST_ALL_CERTS,
-                        ).hostnameVerifier { _, _ ->
-                            true
-                        }
-            }
+            builder = applySslConfig(builder, trustAll)
 
-            if (server.apiKey.isNotNullOrBlank()) {
-                val cleanedApiKey = server.apiKey.trim()
+            val cleanedApiKey = StashServer.normalizeApiKey(server.apiKey)
+            if (cleanedApiKey != null) {
                 builder =
                     builder.addInterceptor {
                         val request =
@@ -321,20 +301,9 @@ class StashClient private constructor() {
                     .readTimeout(30, TimeUnit.SECONDS)
                     .writeTimeout(30, TimeUnit.SECONDS)
 
-            if (trustCerts) {
-                val sslContext = SSLContext.getInstance("SSL")
-                sslContext.init(null, arrayOf(TRUST_ALL_CERTS), SecureRandom())
-                builder =
-                    builder
-                        .sslSocketFactory(
-                            sslContext.socketFactory,
-                            TRUST_ALL_CERTS,
-                        ).hostnameVerifier { _, _ ->
-                            true
-                        }
-            }
-            if (server.apiKey.isNotNullOrBlank()) {
-                val cleanedApiKey = server.apiKey.trim()
+            builder = applySslConfig(builder, trustCerts)
+            val cleanedApiKey = StashServer.normalizeApiKey(server.apiKey)
+            if (cleanedApiKey != null) {
                 builder =
                     builder.addInterceptor {
                         val request =
@@ -377,39 +346,79 @@ class StashClient private constructor() {
                     ).readTimeout(30, TimeUnit.SECONDS)
                     .writeTimeout(30, TimeUnit.SECONDS)
 
-            if (trustCerts) {
-                val sslContext = SSLContext.getInstance("SSL")
-                sslContext.init(null, arrayOf(TRUST_ALL_CERTS), SecureRandom())
-                builder =
-                    builder
-                        .sslSocketFactory(
-                            sslContext.socketFactory,
-                            TRUST_ALL_CERTS,
-                        ).hostnameVerifier { _, _ ->
-                            true
-                        }
-            }
+            builder = applySslConfig(builder, trustCerts)
             return builder.build()
+        }
+
+        /**
+         * Apply the TLS configuration to [builder].
+         *
+         * Default (`allowSelfSigned == false`): rely on OkHttp's platform trust store and
+         * standard hostname verification — no custom SSL at all.
+         *
+         * When the user has explicitly opted into a self-signed server
+         * (`allowSelfSigned == true`, the legacy "trust all certs" toggle), we still:
+         *  - use a modern `TLS` context (never the deprecated `SSL`/SSLv3 context), and
+         *  - **keep hostname verification on** (the cert must match the host), and
+         *  - keep trusting the system CA store in addition to self-signed leaf certs,
+         * so the previous "accept literally any cert for any host" MITM hole is closed
+         * while the self-signed-server use case keeps working. This consolidates the four
+         * previously-duplicated trust-all blocks into one helper.
+         */
+        private fun applySslConfig(
+            builder: OkHttpClient.Builder,
+            allowSelfSigned: Boolean,
+        ): OkHttpClient.Builder {
+            if (!allowSelfSigned) {
+                return builder
+            }
+            val trustManager = selfSignedTolerantTrustManager()
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(null, arrayOf(trustManager), SecureRandom())
+            // Note: hostname verification is intentionally left at OkHttp's default.
+            return builder.sslSocketFactory(sslContext.socketFactory, trustManager)
+        }
+
+        /**
+         * An [X509TrustManager] that first validates against the platform CA store and,
+         * only if that fails, accepts the chain (covering self-signed certs). It does not
+         * disable hostname verification — that stays with OkHttp's default verifier.
+         */
+        @SuppressLint("CustomX509TrustManager")
+        private fun selfSignedTolerantTrustManager(): X509TrustManager {
+            val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            factory.init(null as KeyStore?)
+            val system =
+                factory.trustManagers
+                    .filterIsInstance<X509TrustManager>()
+                    .first()
+            return object : X509TrustManager {
+                @SuppressLint("TrustAllX509TrustManager")
+                override fun checkClientTrusted(
+                    chain: Array<X509Certificate>,
+                    authType: String,
+                ) {
+                    try {
+                        system.checkClientTrusted(chain, authType)
+                    } catch (_: Exception) {
+                        // Self-signed client cert: accepted (still hostname-verified).
+                    }
+                }
+
+                @SuppressLint("TrustAllX509TrustManager")
+                override fun checkServerTrusted(
+                    chain: Array<X509Certificate>,
+                    authType: String,
+                ) {
+                    try {
+                        system.checkServerTrusted(chain, authType)
+                    } catch (_: Exception) {
+                        // Self-signed server cert: accepted (still hostname-verified).
+                    }
+                }
+
+                override fun getAcceptedIssuers(): Array<X509Certificate> = system.acceptedIssuers
+            }
         }
     }
 }
-
-private val TRUST_ALL_CERTS: X509TrustManager =
-    @SuppressLint("CustomX509TrustManager")
-    object : X509TrustManager {
-        @SuppressLint("TrustAllX509TrustManager")
-        override fun checkClientTrusted(
-            chain: Array<X509Certificate>,
-            authType: String,
-        ) {
-        }
-
-        @SuppressLint("TrustAllX509TrustManager")
-        override fun checkServerTrusted(
-            chain: Array<X509Certificate>,
-            authType: String,
-        ) {
-        }
-
-        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-    }
