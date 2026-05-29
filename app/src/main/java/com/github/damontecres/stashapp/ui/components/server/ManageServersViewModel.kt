@@ -114,6 +114,20 @@ class ManageServersViewModel : ViewModel() {
                     } else {
                         connectionState.value = ConnectionState.Testing
                         delay(300L)
+                        // Trust-On-First-Use: if the user opted into self-signed and this server
+                        // isn't pinned yet, capture + pin the presented leaf cert BEFORE testing so
+                        // the pinning trust manager trusts exactly it. Done inline (not fire-and-
+                        // forget) to guarantee the pin exists before the connection runs.
+                        if (trustCerts && StashServer.getCertPin(context, serverUrl) == null) {
+                            val fingerprint =
+                                withContext(Dispatchers.IO) {
+                                    StashClient.captureLeafFingerprint(serverUrl)
+                                }
+                            if (fingerprint != null) {
+                                StashServer.setCertPin(context, serverUrl, fingerprint)
+                                Log.i(TAG, "Pinned certificate $fingerprint for $serverUrl")
+                            }
+                        }
                         try {
                             if (useUsername && username.isNotNullOrBlank() && apiKey.isNotNullOrBlank()) {
                                 testWithUsername(serverUrl, username, apiKey, trustCerts)
@@ -155,7 +169,7 @@ class ManageServersViewModel : ViewModel() {
         trustCerts: Boolean,
     ) {
         try {
-            val httpClient = StashClient.createCookieHttpClient(trustCerts)
+            val httpClient = StashClient.createCookieHttpClient(trustCerts, serverUrl)
             val loginUrl = StashClient.createLoginUrl(serverUrl)
             val request =
                 Request

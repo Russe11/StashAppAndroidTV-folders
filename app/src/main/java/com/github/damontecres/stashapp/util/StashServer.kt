@@ -81,6 +81,15 @@ data class StashServer(
         private const val SERVER_PREF_PREFIX = "server_"
         private const val SERVER_APIKEY_PREF_PREFIX = "apikey_"
 
+        /**
+         * Per-server TLS pin (TOFU): the SHA-256 fingerprint of the leaf certificate the user
+         * accepted on first connect. Stored in the encrypted prefs keyed by raw server URL so a
+         * later connection trusts exactly that cert (and rejects a silently-swapped one). Kept in
+         * [SecurePreferences] only because that is the existing per-server secret store — the pin
+         * itself is a fingerprint, not a secret.
+         */
+        private const val SERVER_CERT_PIN_PREF_PREFIX = "certpin_"
+
         private val servers = ConcurrentHashMap<String, StashServer>()
 
         /**
@@ -155,6 +164,41 @@ data class StashServer(
          */
         fun getStoredApiKey(context: Context): String? = normalizeApiKey(readMigratingSecret(context, SettingsFragment.PREF_STASH_API_KEY))
 
+        private fun certPinKey(serverUrl: String): String = SERVER_CERT_PIN_PREF_PREFIX + serverUrl
+
+        /**
+         * The TOFU cert pin accepted for [serverUrl], or null if none has been accepted. The trust
+         * manager rejects a non-system cert whose leaf doesn't match this.
+         */
+        fun getCertPin(
+            context: Context,
+            serverUrl: String,
+        ): String? = secure(context).getString(certPinKey(serverUrl), null)
+
+        /**
+         * Persist the user-accepted leaf fingerprint for [serverUrl] (Trust-On-First-Use, and the
+         * re-pin path when a cert legitimately rotates).
+         */
+        fun setCertPin(
+            context: Context,
+            serverUrl: String,
+            pin: String,
+        ) {
+            secure(context).edit(true) {
+                putString(certPinKey(serverUrl), pin)
+            }
+        }
+
+        /** Drop the accepted pin for [serverUrl] (e.g. on server removal). */
+        fun clearCertPin(
+            context: Context,
+            serverUrl: String,
+        ) {
+            secure(context).edit(true) {
+                remove(certPinKey(serverUrl))
+            }
+        }
+
         fun getCurrentServerVersion(): Version = ServerPreferences(requireCurrentServer()).serverVersion
 
         fun requireCurrentServer(): StashServer {
@@ -201,6 +245,7 @@ data class StashServer(
             secure(context).edit(true) {
                 remove(serverKey)
                 remove(apiKeyKey)
+                remove(certPinKey(server.url))
             }
             // Drop any stale plaintext copy that may predate the encrypted-store migration.
             PreferenceManager.getDefaultSharedPreferences(context).edit(true) {

@@ -64,6 +64,11 @@
 
     <string name="setup_1_title">Server URL</string>
     <string name="setup_1_description">Configure the server URL</string>
+    <string name="setup_ssl_title">HTTPS Certificate</string>
+    <string name="setup_ssl_description">This server uses a certificate not trusted by the system (e.g. self-signed). Pin it for this server so only this exact certificate is trusted?\n\nNote: the app may need to be restarted/force-stopped after completing setup.</string>
+    <string name="setup_ssl_pin_prompt">Trust this server certificate?\n\nSHA-256 fingerprint:\n%1$s\n\nOnly this exact certificate will be trusted for this server. A different (e.g. swapped) certificate will be rejected.</string>
+    <string name="setup_ssl_pin_failed">Could not connect with the pinned certificate: %1$s\n\nIf the server certificate was changed, re-run setup to pin the new one.</string>
+    <string name="cert_pin_changed_message">This server is presenting a certificate that does not match the one you previously pinned. This can mean the certificate was rotated — or that the connection is being intercepted. Re-pin only if you changed the certificate yourself.</string>
     <string name="app_name_long">Stash for Android TV (Folders)</string>
     <string name="first_time_setup">First time setup</string>
     <string name="stash_server_url">Stash Server URL</string>
