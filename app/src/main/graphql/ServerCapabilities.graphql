@@ -1,0 +1,11 @@
+# NG-only capability handshake. Original upstream Stash has no `serverCapabilities`
+# query, so a "Cannot query field" GraphQL error is the negative signal. This client
+# is NG-only: it gates fork features on `features` (not on a semantic version).
+query ServerCapabilities {
+    serverCapabilities {
+        edition
+        apiVersion
+        features
+        deletedSinceRetentionDays
+    }
+}

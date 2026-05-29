@@ -48,6 +48,39 @@ class ServerPreferences(
             )
         }
 
+    /**
+     * The NG capability handshake for this server, persisted at connect by
+     * [updateServerCapabilities]. Defaults to [ServerCapabilities.UPSTREAM] (no NG features)
+     * until a probe has run, so NG-gated paths stay off rather than firing blind.
+     *
+     * NG-only invariant: gate fork behaviour on [ServerCapabilities.features], not the
+     * semantic server [serverVersion].
+     */
+    val capabilities: ServerCapabilities
+        get() {
+            val edition = preferences.getString(PREF_CAP_EDITION, null) ?: return ServerCapabilities.UPSTREAM
+            return ServerCapabilities(
+                edition = edition,
+                apiVersion = preferences.getInt(PREF_CAP_API_VERSION, 0),
+                features = preferences.getStringSet(PREF_CAP_FEATURES, emptySet())!!.toSet(),
+                deletedSinceRetentionDays = preferences.getInt(PREF_CAP_RETENTION_DAYS, 0),
+            )
+        }
+
+    /**
+     * Persist the result of a [QueryEngine.getServerCapabilities] probe. Called from
+     * [StashServer.updateServerPrefs] at connect.
+     */
+    fun updateServerCapabilities(capabilities: ServerCapabilities) {
+        Log.i(TAG, "updateServerCapabilities for ${server.url}: $capabilities")
+        preferences.edit(true) {
+            putString(PREF_CAP_EDITION, capabilities.edition)
+            putInt(PREF_CAP_API_VERSION, capabilities.apiVersion)
+            putStringSet(PREF_CAP_FEATURES, capabilities.features)
+            putInt(PREF_CAP_RETENTION_DAYS, capabilities.deletedSinceRetentionDays)
+        }
+    }
+
     val trackActivity get() = preferences.getBoolean(PREF_TRACK_ACTIVITY, true)
 
     val showStudioAsText get() = preferences.getBoolean(PREF_INTERFACE_STUDIOS_AS_TEXT, false)
@@ -434,6 +467,12 @@ class ServerPreferences(
 
         const val PREF_SERVER_VERSION = "serverInfo.version"
         const val PREF_COMPANION_PLUGIN_VERSION = "companionPlugin.version"
+
+        // NG capability handshake (see ServerCapabilities / docs/api/ng-contract.md §1)
+        const val PREF_CAP_EDITION = "serverCapabilities.edition"
+        const val PREF_CAP_API_VERSION = "serverCapabilities.apiVersion"
+        const val PREF_CAP_FEATURES = "serverCapabilities.features"
+        const val PREF_CAP_RETENTION_DAYS = "serverCapabilities.deletedSinceRetentionDays"
 
         const val PREF_TRACK_ACTIVITY = "trackActivity"
         const val PREF_MINIMUM_PLAY_PERCENT = "minimumPlayPercent"

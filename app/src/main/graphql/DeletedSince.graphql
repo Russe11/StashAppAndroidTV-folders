@@ -1,0 +1,24 @@
+# NG-only resumable deletion feed (tombstones), used by the Folders sync to prune
+# removed scenes from the local Room cache instead of diffing the whole id set.
+#
+# Polling contract (see docs/api/ng-contract.md §3):
+#  - First sync: pass `since` (or nothing) and persist the returned `cursor`.
+#  - Subsequent polls: pass the persisted cursor as `after`. `after` wins over `since`.
+#  - While `has_more` is true, poll again immediately to drain the backlog.
+#  - If `pruned` is true, the stored cursor predates the server's retention horizon;
+#    the client must full-resync (reconcile the entire id set) instead of trusting
+#    this incremental feed.
+#  - `cursor` is opaque: persist it verbatim, never parse it or advance a watermark.
+query DeletedSince($since: Time, $after: String, $limit: Int) {
+    deletedSince(since: $since, after: $after, limit: $limit) {
+        records {
+            entity
+            id
+            deleted_at
+            cursor
+        }
+        cursor
+        has_more
+        pruned
+    }
+}

@@ -45,6 +45,15 @@ data class StashServer(
         val queryEngine = QueryEngine(this)
         val result = queryEngine.getServerConfiguration()
         serverPreferences.updatePreferences(result)
+        // NG capability handshake: probe + persist so NG-gated paths (e.g. the deletedSince
+        // deletion feed) can be enabled at connect rather than re-probed on every operation.
+        // A probe failure must not fail the whole connect — the persisted default is
+        // ServerCapabilities.UPSTREAM (NG paths off), which is the safe fallback.
+        try {
+            serverPreferences.updateServerCapabilities(queryEngine.getServerCapabilities())
+        } catch (t: Throwable) {
+            android.util.Log.w("StashServer", "serverCapabilities probe failed for $url: ${t.message}", t)
+        }
         return serverPreferences
     }
 

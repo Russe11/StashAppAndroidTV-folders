@@ -8,6 +8,7 @@ import com.apollographql.apollo.api.Operation
 import com.apollographql.apollo.api.Optional
 import com.apollographql.apollo.api.Query
 import com.github.damontecres.stashapp.api.ConfigurationQuery
+import com.github.damontecres.stashapp.api.DeletedSinceQuery
 import com.github.damontecres.stashapp.api.FindGalleriesQuery
 import com.github.damontecres.stashapp.api.FindGroupQuery
 import com.github.damontecres.stashapp.api.FindGroupsQuery
@@ -30,6 +31,7 @@ import com.github.damontecres.stashapp.api.GetSceneQuery
 import com.github.damontecres.stashapp.api.GetStudioQuery
 import com.github.damontecres.stashapp.api.GetTagQuery
 import com.github.damontecres.stashapp.api.GetVideoSceneQuery
+import com.github.damontecres.stashapp.api.ServerCapabilitiesQuery
 import com.github.damontecres.stashapp.api.fragment.ExtraImageData
 import com.github.damontecres.stashapp.api.fragment.FullMarkerData
 import com.github.damontecres.stashapp.api.fragment.FullSceneData
@@ -465,6 +467,77 @@ class QueryEngine(
     suspend fun getServerConfiguration(): ConfigurationQuery.Data {
         val query = ConfigurationQuery()
         return executeQuery(query).data!!
+    }
+
+    /**
+     * Probe the NG capability handshake. Unlike [executeQuery], this does **not** throw when
+     * the field is missing: original upstream Stash has no `serverCapabilities` query, so a
+     * "Cannot query field" GraphQL error is the negative signal and maps to
+     * [ServerCapabilities.UPSTREAM]. Any other error (network, auth) is rethrown so the caller
+     * can distinguish "talked to an upstream server" from "couldn't reach the server at all".
+     *
+     * NG-only invariant: callers gate fork behaviour on [ServerCapabilities.features], never on
+     * the semantic server version.
+     */
+    suspend fun getServerCapabilities(): ServerCapabilities =
+        withContext(Dispatchers.IO) {
+            val queryName = "ServerCapabilities"
+            val id = QUERY_ID.getAndIncrement()
+            Log.v(TAG, "executeQuery $id $queryName")
+            val response = client.query(ServerCapabilitiesQuery()).execute()
+            val data = response.data?.serverCapabilities
+            if (data != null) {
+                return@withContext ServerCapabilities(
+                    edition = data.edition,
+                    apiVersion = data.apiVersion,
+                    features = data.features.toSet(),
+                    deletedSinceRetentionDays = data.deletedSinceRetentionDays,
+                )
+            }
+            val errors = response.errors
+            if (!errors.isNullOrEmpty()) {
+                val isUnknownField =
+                    errors.any { err ->
+                        val msg = err.message.lowercase()
+                        "cannot query field" in msg || "unknown field" in msg
+                    }
+                if (isUnknownField) {
+                    Log.i(TAG, "serverCapabilities unknown -> treating server as upstream")
+                    return@withContext ServerCapabilities.UPSTREAM
+                }
+                val errorMessages = errors.joinToString("\n") { it.message }
+                throw QueryException(id, queryName, "Error in $queryName: $errorMessages")
+            }
+            val exception = response.exception
+            if (exception != null) {
+                throw createException(id, queryName, exception) { msg, ex ->
+                    QueryException(id, queryName, msg, ex)
+                }
+            }
+            // No data, no errors, no exception: nothing to gate on, treat as upstream.
+            ServerCapabilities.UPSTREAM
+        }
+
+    /**
+     * Fetch one page of the NG resumable deletion feed (tombstones). See
+     * `docs/api/ng-contract.md` §3. Pass the persisted [after] cursor on subsequent polls (it
+     * wins over [since]); persist [DeletedSinceQuery.DeletedSince.cursor] for the next poll.
+     *
+     * Caller must gate on [ServerCapabilities.supportsDeletedSince] before calling — this
+     * issues the query unconditionally.
+     */
+    suspend fun deletedSince(
+        since: Any? = null,
+        after: String? = null,
+        limit: Int? = null,
+    ): DeletedSinceQuery.DeletedSince {
+        val query =
+            DeletedSinceQuery(
+                since = since,
+                after = after,
+                limit = limit,
+            )
+        return executeQuery(query).data!!.deletedSince
     }
 
     suspend fun getJob(jobId: String): StashJob? {
