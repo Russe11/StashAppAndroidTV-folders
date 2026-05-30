@@ -18,3 +18,47 @@ subscription EntityChanged($types: [String!]) {
         time
     }
 }
+
+# NG deviceBus: all presence/playback changes for every device on the bus. Gate consumption on
+# serverCapabilities.features containing "deviceBus" (see ServerCapabilities) AND the opt-in
+# presence toggle. Payloads carry scene IDs only — resolve scene names locally for display.
+subscription DevicePresence {
+    devicePresence {
+        kind
+        device {
+            ...DeviceFields
+        }
+    }
+}
+
+# NG deviceBus: this device subscribes with its OWN deviceId and receives only commands targeted
+# at it. The player obeys these (R-C). Carries scene IDs, not titles.
+subscription DeviceCommands($deviceId: ID!) {
+    deviceCommands(deviceId: $deviceId) {
+        fromDeviceId
+        type
+        sceneId
+        sceneIds
+        startSeconds
+        seekSeconds
+    }
+}
+
+# Client-side operation fragment for the shared Device shape. Named `DeviceFields` (not
+# `DeviceData`) deliberately: the apollo-compiler plugin marks every fragment ending in `Data`
+# with an `id` as a library-content `StashData`, which a Device is not. The GraphQL *types/fields*
+# (the server contract) are unchanged — only this client fragment's name differs.
+fragment DeviceFields on Device {
+    id
+    name
+    kind
+    capabilities
+    online
+    lastSeen
+    playback {
+        sceneId
+        positionSeconds
+        paused
+        updatedAt
+    }
+}
