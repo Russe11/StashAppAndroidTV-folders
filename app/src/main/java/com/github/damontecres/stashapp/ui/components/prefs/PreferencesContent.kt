@@ -299,9 +299,9 @@ fun PreferencesContent(
         }
     val screenTitle =
         when (preferenceScreenOption) {
-            PreferenceScreenOption.BASIC -> "Preferences"
-            PreferenceScreenOption.ADVANCED -> "Advanced Preferences"
-            PreferenceScreenOption.USER_INTERFACE -> "User Interface Preferences"
+            PreferenceScreenOption.BASIC -> stringResource(R.string.pref_screen_title_basic)
+            PreferenceScreenOption.ADVANCED -> stringResource(R.string.pref_screen_title_advanced)
+            PreferenceScreenOption.USER_INTERFACE -> stringResource(R.string.pref_screen_title_ui)
         }
 
     // Search/filter — touch only; skip on TV to avoid disrupting D-pad focus traversal.
@@ -385,7 +385,7 @@ fun PreferencesContent(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         placeholder = {
-                            androidx.compose.material3.Text("Filter settings")
+                            androidx.compose.material3.Text(stringResource(R.string.settings_filter_hint))
                         },
                         leadingIcon = {
                             Icon(
@@ -398,7 +398,7 @@ fun PreferencesContent(
                                 IconButton(onClick = { searchQuery = "" }) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear filter",
+                                        contentDescription = stringResource(R.string.settings_filter_clear),
                                     )
                                 }
                             }
@@ -414,7 +414,7 @@ fun PreferencesContent(
             if (resolvedGroups.isEmpty() && searchQuery.isNotBlank()) {
                 item {
                     Text(
-                        text = "No settings match",
+                        text = stringResource(R.string.settings_no_matches),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,

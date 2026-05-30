@@ -3,6 +3,7 @@ package com.github.damontecres.stashapp.ui.nav
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -225,6 +226,27 @@ fun ApplicationContent(
         val fullScreen = if (isTvDevice) destination.fullScreen else destination.fullScreenTouch
 
         if (fullScreen) {
+            // Immersive/full-bleed destinations intentionally draw under the system bars
+            // (RootActivity hides them for these), so they must NOT consume safe-drawing
+            // insets. Every other full-screen destination should pad to stay clear of the
+            // status/nav bars now that the app renders edge-to-edge. TV has no soft bars,
+            // so we gate the padding to non-TV to keep TV layouts visually identical.
+            val immersive =
+                when (destination) {
+                    is Destination.Playback,
+                    is Destination.Playlist,
+                    is Destination.Slideshow,
+                    is Destination.UpdateMarker,
+                    -> true
+
+                    else -> false
+                }
+            val fullScreenModifier =
+                if (!isTvDevice && !immersive) {
+                    Modifier.fillMaxSize().safeDrawingPadding()
+                } else {
+                    Modifier.fillMaxSize()
+                }
             DestinationContent(
                 navManager = navigationManager,
                 server = server,
@@ -234,7 +256,7 @@ fun ApplicationContent(
                 longClicker = longClicker,
                 onChangeTheme = onChangeTheme,
                 onSwitchServer = onSwitchServer,
-                modifier = Modifier.fillMaxSize(),
+                modifier = fullScreenModifier,
                 onUpdateTitle = null,
             )
         } else {

@@ -313,4 +313,37 @@
     <string name="mpv_gpu_next">MPV: Use gpu-next</string>
     <string name="mpv_settings">MPV Settings</string>
 
+    <!-- Settings filter (PreferencesContent) -->
+    <string name="settings_filter_hint">Filter settings</string>
+    <string name="settings_filter_clear">Clear filter</string>
+    <string name="settings_no_matches">No settings match</string>
+
+    <!-- Preferences screen titles (PreferencesContent) -->
+    <string name="pref_screen_title_basic">Preferences</string>
+    <string name="pref_screen_title_advanced">Advanced Preferences</string>
+    <string name="pref_screen_title_ui">User Interface Preferences</string>
+
+    <!-- Setup step 1: server URL (SetupStep1ServerUrl) -->
+    <string name="setup_server_url_action_title">Server URL</string>
+    <string name="setup_connection_error">Could not connect to the server. Check the URL and try again.</string>
+
+    <!-- Setup step 2: SSL / cert pinning (SetupStep2Ssl) -->
+    <string name="setup_ssl_action_yes_title">Yes</string>
+    <string name="setup_ssl_action_yes_description">Pin this server\'s certificate</string>
+    <string name="setup_ssl_action_no_title">No</string>
+    <string name="setup_ssl_action_no_description">Enter a different URL</string>
+    <string name="setup_ssl_explanation">This server uses a self-signed certificate. Trusting it pins this exact certificate to this device so only it is accepted for this server.\n\n</string>
+
+    <!-- Update app page (UpdateAppPage) -->
+    <string name="update_storage_permission_title">Storage permission needed</string>
+    <string name="update_storage_permission_rationale">Stash needs storage access to download the update file to your device before installing it.</string>
+    <string name="update_permission_denied_snackbar">Permission needed to download the update</string>
+    <string name="update_permission_denied_settings">Settings</string>
+    <string name="update_available_heading">Update available</string>
+    <string name="update_download_and_install">Download and update</string>
+    <string name="update_downloading">Downloading</string>
+
+    <!-- Generic actions -->
+    <string name="action_retry">Retry</string>
+
 </resources>

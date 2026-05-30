@@ -12,8 +12,8 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.github.damontecres.stashapp.ui.theme.SemanticColors
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -48,8 +48,8 @@ fun JobDisplay(
                 tint =
                     when (job.status) {
                         JobStatus.READY -> MaterialTheme.colorScheme.border
-                        JobStatus.RUNNING -> Color(0xFF006800)
-                        JobStatus.FINISHED -> Color(0xFF006800)
+                        JobStatus.RUNNING -> SemanticColors.JobRunning
+                        JobStatus.FINISHED -> SemanticColors.JobFinished
                         JobStatus.STOPPING -> MaterialTheme.colorScheme.border
                         JobStatus.CANCELLED -> MaterialTheme.colorScheme.error
                         JobStatus.FAILED -> MaterialTheme.colorScheme.error
