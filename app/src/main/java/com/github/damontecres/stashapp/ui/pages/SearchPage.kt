@@ -1,14 +1,25 @@
 package com.github.damontecres.stashapp.ui.pages
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -32,6 +44,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.type.SortDirectionEnum
 import com.github.damontecres.stashapp.data.DataType
@@ -45,8 +58,11 @@ import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.cards.StashCard
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.LongClicker
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.RowColumn
 import com.github.damontecres.stashapp.ui.components.SearchEditTextBox
+import com.github.damontecres.stashapp.ui.components.SearchHistory
+import com.github.damontecres.stashapp.ui.theme.Spacing
 import com.github.damontecres.stashapp.ui.tryRequestFocus
 import com.github.damontecres.stashapp.ui.util.OneTimeLaunchedEffect
 import com.github.damontecres.stashapp.ui.util.ifElse
@@ -154,9 +170,19 @@ fun SearchPage(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    val touch = isNotTvDevice
 
     var searchQuery by rememberSaveable { mutableStateOf(initialQuery) }
     val perPage = uiConfig.preferences.searchPreferences.maxResults
+
+    // Touch-only: recent submitted queries, loaded from SharedPreferences and kept in sync.
+    var recentSearches by remember { mutableStateOf(emptyList<String>()) }
+    var searchBarExpanded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(touch) {
+        if (touch) {
+            recentSearches = SearchHistory.get(context)
+        }
+    }
 
     val scenes by viewModel.scenes.observeAsState(listOf())
     val groups by viewModel.groups.observeAsState(listOf())
@@ -185,7 +211,9 @@ fun SearchPage(
     }
 
     LaunchedEffect(Unit) {
-        focusRequester.tryRequestFocus()
+        if (!touch) {
+            focusRequester.tryRequestFocus()
+        }
     }
 
     val listState = rememberLazyListState()
@@ -203,23 +231,67 @@ fun SearchPage(
         stickyHeader {
             var job: Job? = null
             val searchDelay = uiConfig.preferences.searchPreferences.searchDelayMs
-            SearchEditTextBox(
-                modifier = Modifier.ifElse(focusedRow < 0, Modifier.focusRequester(focusRequester)),
-                value = searchQuery,
-                onValueChange = { newQuery ->
-                    searchQuery = newQuery
-                    job?.cancel()
-                    job =
-                        scope.launch(StashCoroutineExceptionHandler()) {
-                            delay(searchDelay)
-                            viewModel.search(searchQuery, perPage)
-                        }
-                },
-                onSearchClick = {
-                    job?.cancel()
-                    viewModel.search(searchQuery, perPage)
-                },
-            )
+            if (touch) {
+                // Touch/phone: native Material 3 SearchBar with recent-search suggestions.
+                SearchPageSearchBar(
+                    query = searchQuery,
+                    expanded = searchBarExpanded,
+                    recentSearches = recentSearches,
+                    onExpandedChange = { searchBarExpanded = it },
+                    onQueryChange = { newQuery ->
+                        searchQuery = newQuery
+                        job?.cancel()
+                        job =
+                            scope.launch(StashCoroutineExceptionHandler()) {
+                                delay(searchDelay)
+                                viewModel.search(searchQuery, perPage)
+                            }
+                    },
+                    onSearch = { submitted ->
+                        job?.cancel()
+                        searchQuery = submitted
+                        viewModel.search(submitted, perPage)
+                        SearchHistory.add(context, submitted)
+                        recentSearches = SearchHistory.get(context)
+                        searchBarExpanded = false
+                    },
+                    onClear = {
+                        searchQuery = ""
+                        job?.cancel()
+                        viewModel.search("", perPage)
+                    },
+                    onRecentClick = { recent ->
+                        searchQuery = recent
+                        job?.cancel()
+                        viewModel.search(recent, perPage)
+                        SearchHistory.add(context, recent)
+                        recentSearches = SearchHistory.get(context)
+                        searchBarExpanded = false
+                    },
+                    onClearHistory = {
+                        SearchHistory.clear(context)
+                        recentSearches = emptyList()
+                    },
+                )
+            } else {
+                SearchEditTextBox(
+                    modifier = Modifier.ifElse(focusedRow < 0, Modifier.focusRequester(focusRequester)),
+                    value = searchQuery,
+                    onValueChange = { newQuery ->
+                        searchQuery = newQuery
+                        job?.cancel()
+                        job =
+                            scope.launch(StashCoroutineExceptionHandler()) {
+                                delay(searchDelay)
+                                viewModel.search(searchQuery, perPage)
+                            }
+                    },
+                    onSearchClick = {
+                        job?.cancel()
+                        viewModel.search(searchQuery, perPage)
+                    },
+                )
+            }
         }
 
         DataType.entries.forEachIndexed { index, dataType ->
@@ -306,6 +378,111 @@ fun SearchItemsRow(
                     longClicker = longClicker,
                     getFilterAndPosition = null,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Touch-only Material 3 [SearchBar] used by [SearchPage]. Wraps the existing debounce/query
+ * callbacks (passed in via [onQueryChange]/[onSearch]) and surfaces the recent-search history as
+ * tappable suggestions when expanded with a blank query.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchPageSearchBar(
+    query: String,
+    expanded: Boolean,
+    recentSearches: List<String>,
+    onExpandedChange: (Boolean) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    onClear: () -> Unit,
+    onRecentClick: (String) -> Unit,
+    onClearHistory: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SearchBar(
+        modifier = modifier.fillMaxWidth(),
+        inputField = {
+            SearchBarDefaults.InputField(
+                query = query,
+                onQueryChange = onQueryChange,
+                onSearch = onSearch,
+                expanded = expanded,
+                onExpandedChange = onExpandedChange,
+                placeholder = {
+                    androidx.compose.material3.Text(
+                        text = stringResource(R.string.stashapp_actions_search),
+                    )
+                },
+                leadingIcon = {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = stringResource(R.string.stashapp_actions_search),
+                    )
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        androidx.compose.material3.IconButton(onClick = onClear) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.stashapp_actions_clear),
+                            )
+                        }
+                    }
+                },
+            )
+        },
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+    ) {
+        if (query.isBlank() && recentSearches.isNotEmpty()) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = Spacing.md,
+                            end = Spacing.sm,
+                            top = Spacing.sm,
+                            bottom = Spacing.xs,
+                        ),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.Text(
+                    text = stringResource(R.string.format_recently_used, "").trim(),
+                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                androidx.compose.material3.TextButton(onClick = onClearHistory) {
+                    androidx.compose.material3.Text(
+                        text = stringResource(R.string.stashapp_actions_clear),
+                    )
+                }
+            }
+            recentSearches.forEach { recent ->
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onRecentClick(recent) }
+                            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    androidx.compose.material3.Text(
+                        text = recent,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }

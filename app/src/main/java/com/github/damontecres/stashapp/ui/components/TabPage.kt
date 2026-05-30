@@ -1,10 +1,14 @@
 package com.github.damontecres.stashapp.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.runtime.Composable
@@ -16,8 +20,10 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -34,6 +40,7 @@ import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
+import kotlinx.coroutines.launch
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.fragment.StashData
@@ -55,7 +62,7 @@ import com.github.damontecres.stashapp.util.StashServer
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TabPage(
     name: AnnotatedString,
@@ -86,13 +93,36 @@ fun TabPage(
     val showTabRow by remember { derivedStateOf { showTabRowRaw } }
     val focusRequesters = remember { List(tabs.size) { FocusRequester() } }
 
+    // Capture device type once in composable scope so LaunchedEffect lambdas (coroutine scope) can read it.
+    val isTV = isTvDevice
+
+    // TV: debounce resolvedTabIndex so rapid D-pad scrolling skips intermediate renders.
+    // Touch: no debounce — the pager handles smooth transitions.
     var resolvedTabIndex by remember { mutableIntStateOf(selectedTabIndex) }
     LaunchedEffect(selectedTabIndex) {
-        // Add a slight delay so if scrolling quickly through tabs, can skip rending the skipped tabs
-        delay(200.milliseconds)
+        if (isTV) {
+            // Add a slight delay so if scrolling quickly through tabs, can skip rendering the skipped tabs
+            delay(200.milliseconds)
+        }
         resolvedTabIndex = selectedTabIndex
         if (rememberTab) {
             preferences.edit { putInt(rememberTabKey, resolvedTabIndex) }
+        }
+    }
+
+    // Always create pager state (Compose rules forbid conditional remember calls).
+    // On TV it is created but never used; on touch it drives the HorizontalPager.
+    val pageCount = if (tabs.isNotEmpty()) tabs.size else 1
+    val pagerState = rememberPagerState(initialPage = selectedTabIndex) { pageCount }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Touch: keep selected tab index in sync when the user swipes the pager.
+    // TV: pagerState exists but is unused; isTV is stable for the lifetime of the composition.
+    LaunchedEffect(pagerState) {
+        if (!isTV) {
+            snapshotFlow { pagerState.settledPage }.collect { page ->
+                selectedTabIndex = page
+            }
         }
     }
 
@@ -149,16 +179,21 @@ fun TabPage(
                     }
                 }
             } else {
-                // Not tv
+                // Touch: tap-to-switch tab strip; pager animates to page on tap
                 PrimaryScrollableTabRow(
                     selectedTabIndex = selectedTabIndex,
-                    modifier = Modifier,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     tabs.forEachIndexed { index, tab ->
                         key(index) {
                             androidx.compose.material3.Tab(
                                 selected = index == selectedTabIndex,
-                                onClick = { selectedTabIndex = index },
+                                onClick = {
+                                    selectedTabIndex = index
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(index)
+                                    }
+                                },
                                 selectedContentColor = MaterialTheme.colorScheme.onSurface,
                                 unselectedContentColor = MaterialTheme.colorScheme.onSurface,
                                 text = {
@@ -174,8 +209,7 @@ fun TabPage(
                                 },
                                 modifier =
                                     Modifier
-                                        .align(Alignment.CenterHorizontally)
-                                        .focusRequester(focusRequesters[index]),
+                                        .align(Alignment.CenterHorizontally),
                             )
                         }
                     }
@@ -183,9 +217,23 @@ fun TabPage(
             }
         }
         if (tabs.isNotEmpty()) {
-//            Log.i("Tabs", "resolvedTabIndex=$resolvedTabIndex")
-            tabs[resolvedTabIndex].content(this) { columns, position ->
-                showTabRowRaw = position < columns
+            if (isTV) {
+                // TV: render single tab content with debounced index (unchanged behavior)
+                tabs[resolvedTabIndex].content(this) { columns, position ->
+                    showTabRowRaw = position < columns
+                }
+            } else {
+                // Touch: swipeable pager — each page renders one tab's content
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        tabs[page].content(this) { columns, position ->
+                            showTabRowRaw = position < columns
+                        }
+                    }
+                }
             }
         }
     }
