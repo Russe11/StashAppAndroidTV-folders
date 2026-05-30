@@ -34,6 +34,7 @@ import com.github.damontecres.stashapp.navigation.FilterAndPosition
 import com.github.damontecres.stashapp.presenters.ScenePresenter
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalSceneCurationOverrides
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.LongClicker
 import com.github.damontecres.stashapp.ui.enableMarquee
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
@@ -106,12 +107,14 @@ fun SceneCard(
             }
         },
         description = {
+            // `it` is the D-pad-focused flag; on touch there is no focus event, so also
+            // animate the icon row there so phone users see the full row.
             IconRowText(
                 sfwMode = uiConfig.sfwMode,
                 dataTypeMap,
                 effectiveOCounter ?: -1,
                 Modifier
-                    .enableMarquee(it)
+                    .enableMarquee(it || isNotTvDevice)
                     .align(Alignment.Center),
             )
         },

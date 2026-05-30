@@ -14,7 +14,6 @@ import androidx.tv.material3.CardGlow
 import androidx.tv.material3.CardScale
 import androidx.tv.material3.CardShape
 import androidx.tv.material3.LocalContentColor
-import androidx.tv.material3.MaterialTheme
 import com.github.damontecres.stashapp.ui.DeviceType
 import com.github.damontecres.stashapp.ui.LocalDeviceType
 
@@ -45,11 +44,13 @@ fun Card(
             content = content,
         )
     } else {
-        // TODO this is kind of hack to force tv.Text to use the right color
+        // Force tv.Text to use the right color, then render a properly-styled Material3 card
+        // (rounded shape + tonal/elevated surface) instead of dropping the styling params.
         CompositionLocalProvider(
-            LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+            LocalContentColor provides androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
         ) {
-            androidx.compose.material3.Card(
+            androidx.compose.material3.ElevatedCard(
+                shape = androidx.compose.material3.MaterialTheme.shapes.medium,
                 modifier =
                     modifier
                         .combinedClickable(

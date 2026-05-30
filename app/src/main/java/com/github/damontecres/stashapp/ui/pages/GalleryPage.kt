@@ -32,6 +32,7 @@ import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.components.BasicItemInfo
+import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.EditItem
 import com.github.damontecres.stashapp.ui.components.ItemDetails
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
@@ -41,6 +42,7 @@ import com.github.damontecres.stashapp.ui.components.TabProvider
 import com.github.damontecres.stashapp.ui.components.TableRow
 import com.github.damontecres.stashapp.ui.components.createTabFunc
 import com.github.damontecres.stashapp.ui.components.scene.AddRemove
+import com.github.damontecres.stashapp.ui.components.states.ErrorState
 import com.github.damontecres.stashapp.ui.components.tabFindFilter
 import com.github.damontecres.stashapp.ui.showAddPerf
 import com.github.damontecres.stashapp.ui.showAddTag
@@ -72,9 +74,12 @@ fun GalleryPage(
     var gallery by remember { mutableStateOf<GalleryData?>(null) }
     var studio by remember { mutableStateOf<GalleryData.Studio?>(null) }
     var tags by remember { mutableStateOf<List<TagData>>(listOf()) }
+    var loadError by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableIntStateOf(0) }
     // Remember separately so we don't have refresh the whole page
     var rating100 by remember { mutableIntStateOf(0) }
-    LaunchedEffect(id) {
+    LaunchedEffect(id, reloadKey) {
+        loadError = false
         try {
             val queryEngine = QueryEngine(server)
             gallery = queryEngine.getGallery(id)
@@ -86,6 +91,7 @@ fun GalleryPage(
         } catch (ex: QueryEngine.QueryException) {
             Log.e(TAG, "No gallery found with ID $id", ex)
             Toast.makeText(context, "No gallery found with ID $id", Toast.LENGTH_LONG).show()
+            loadError = true
         }
     }
 
@@ -225,6 +231,16 @@ fun GalleryPage(
             modifier,
             onUpdateTitle == null,
         )
+    } ?: run {
+        if (loadError) {
+            ErrorState(
+                message = "Couldn't load this gallery",
+                modifier = modifier.fillMaxSize(),
+                onRetry = { reloadKey++ },
+            )
+        } else {
+            CircularProgress(modifier = modifier)
+        }
     }
 }
 

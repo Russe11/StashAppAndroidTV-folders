@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +35,7 @@ import com.github.damontecres.stashapp.proto.TabType
 import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.components.BasicItemInfo
+import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.ItemDetails
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.ItemsRow
@@ -42,6 +44,7 @@ import com.github.damontecres.stashapp.ui.components.StashGridTab
 import com.github.damontecres.stashapp.ui.components.TabPage
 import com.github.damontecres.stashapp.ui.components.TabProvider
 import com.github.damontecres.stashapp.ui.components.TableRow
+import com.github.damontecres.stashapp.ui.components.states.ErrorState
 import com.github.damontecres.stashapp.ui.components.tabFindFilter
 import com.github.damontecres.stashapp.ui.filterArgsSaver
 import com.github.damontecres.stashapp.util.LoggingCoroutineExceptionHandler
@@ -67,6 +70,8 @@ fun TagPage(
 ) {
     val context = LocalContext.current
     var tag by remember { mutableStateOf<TagData?>(null) }
+    var loadError by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableIntStateOf(0) }
     // Remember separately so we don't have refresh the whole page
     var favorite by remember { mutableStateOf(false) }
     var parentTags by remember { mutableStateOf<List<TagData>>(listOf()) }
@@ -82,7 +87,8 @@ fun TagPage(
         )
     }
 
-    LaunchedEffect(id) {
+    LaunchedEffect(id, reloadKey) {
+        loadError = false
         try {
             val queryEngine = QueryEngine(server)
             tag = queryEngine.getTag(id)
@@ -94,6 +100,7 @@ fun TagPage(
         } catch (ex: QueryEngine.QueryException) {
             Log.e(TAG, "No tag found with ID $id", ex)
             Toast.makeText(context, "No tag found with ID $id", Toast.LENGTH_LONG).show()
+            loadError = true
         }
     }
 
@@ -374,6 +381,16 @@ fun TagPage(
             modifier,
             onUpdateTitle == null,
         )
+    } ?: run {
+        if (loadError) {
+            ErrorState(
+                message = "Couldn't load this tag",
+                modifier = modifier.fillMaxSize(),
+                onRetry = { reloadKey++ },
+            )
+        } else {
+            CircularProgress(modifier = modifier)
+        }
     }
 }
 

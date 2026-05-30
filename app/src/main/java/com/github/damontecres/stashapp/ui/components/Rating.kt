@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.selection.selectable
@@ -47,6 +48,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -63,6 +67,7 @@ import com.github.damontecres.stashapp.ui.AppColors
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.PreviewTheme
 import com.github.damontecres.stashapp.ui.compat.Button
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.compat.isTvDevice
 import com.github.damontecres.stashapp.ui.tryRequestFocus
 import com.github.damontecres.stashapp.ui.util.playOnClickSound
@@ -158,8 +163,12 @@ fun StarRating(
 ) {
     val context = LocalContext.current
     var tempRating by remember(rating100) { mutableIntStateOf(rating100) }
-    val percentage = (if (enabled) tempRating else rating100) / 100f
+    val effectiveRating = if (enabled) tempRating else rating100
+    val percentage = effectiveRating / 100f
     val focusRequesters = remember { List(5) { FocusRequester() } }
+    // Stars represent a 0..5 scale (each star == 20 points). Surface that to a11y services.
+    val ratingStateDescription =
+        stringResource(R.string.stashapp_rating) + ": ${effectiveRating / 20f} / 5"
     Box(
         modifier =
             modifier
@@ -170,6 +179,7 @@ fun StarRating(
             modifier =
                 Modifier
                     .selectableGroup()
+                    .semantics { stateDescription = ratingStateDescription }
                     .padding(4.dp)
                     .drawWithCache {
                         onDrawWithContent {
@@ -215,11 +225,21 @@ fun StarRating(
                         } else {
                             Color.Unspecified
                         }
+                    // On touch, guarantee a >= 48.dp tap target around each star without
+                    // changing the ~32.dp visual size used on TV.
+                    val touchTargetModifier =
+                        if (isNotTvDevice && enabled) {
+                            Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        } else {
+                            Modifier
+                        }
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier =
                             Modifier
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(focusedColor),
+                                .background(focusedColor)
+                                .then(touchTargetModifier),
                     ) {
                         Icon(
                             imageVector = icon,
@@ -244,6 +264,7 @@ fun StarRating(
                                                 if (i == 5) focusRequesters.first() else FocusRequester.Default
                                         }.selectable(
                                             selected = isRated,
+                                            role = Role.Button,
                                             onClick = {
                                                 if (playSoundOnFocus) playOnClickSound(context)
                                                 val newRating100 =
@@ -317,6 +338,16 @@ fun DecimalRating(
             if (focused) playOnClickSound(context)
         }
     }
+    // On touch, guarantee the whole rating chip is at least a 48.dp tap target without
+    // affecting TV sizing.
+    val touchTargetModifier =
+        if (isNotTvDevice && enabled) {
+            Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+        } else {
+            Modifier
+        }
+    val ratingStateDescription =
+        stringResource(R.string.stashapp_rating) + ": $rating / 10"
     Row(
         modifier =
             modifier
@@ -326,10 +357,12 @@ fun DecimalRating(
                     enabled = enabled,
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,
+                    role = Role.Button,
                 ) {
                     if (playSoundOnFocus) playOnClickSound(context)
                     showDialog = true
-                },
+                }.then(touchTargetModifier)
+                .semantics { stateDescription = ratingStateDescription },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(

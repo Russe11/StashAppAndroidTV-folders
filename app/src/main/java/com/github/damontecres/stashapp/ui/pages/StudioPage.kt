@@ -37,6 +37,7 @@ import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.components.BasicItemInfo
+import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.EditItem
 import com.github.damontecres.stashapp.ui.components.ItemDetails
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
@@ -46,6 +47,7 @@ import com.github.damontecres.stashapp.ui.components.TabPage
 import com.github.damontecres.stashapp.ui.components.TabProvider
 import com.github.damontecres.stashapp.ui.components.TableRow
 import com.github.damontecres.stashapp.ui.components.scene.AddRemove
+import com.github.damontecres.stashapp.ui.components.states.ErrorState
 import com.github.damontecres.stashapp.ui.components.tabFindFilter
 import com.github.damontecres.stashapp.ui.filterArgsSaver
 import com.github.damontecres.stashapp.ui.showAddTag
@@ -75,12 +77,15 @@ fun StudioPage(
 ) {
     val context = LocalContext.current
     var studio by remember { mutableStateOf<StudioData?>(null) }
+    var loadError by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableIntStateOf(0) }
     // Remember separately so we don't have refresh the whole page
     var favorite by remember { mutableStateOf(false) }
     var rating100 by remember { mutableIntStateOf(0) }
     var tags by remember { mutableStateOf<List<TagData>>(listOf()) }
     var parentStudio by remember { mutableStateOf<StudioData.Parent_studio?>(null) }
-    LaunchedEffect(id) {
+    LaunchedEffect(id, reloadKey) {
+        loadError = false
         try {
             val queryEngine = QueryEngine(server)
             studio = queryEngine.getStudio(id)
@@ -93,6 +98,7 @@ fun StudioPage(
         } catch (ex: QueryEngine.QueryException) {
             Log.e(TAG, "No studio found with ID $id", ex)
             Toast.makeText(context, "No studio found with ID $id", Toast.LENGTH_LONG).show()
+            loadError = true
         }
     }
 
@@ -476,6 +482,16 @@ fun StudioPage(
             modifier,
             onUpdateTitle == null,
         )
+    } ?: run {
+        if (loadError) {
+            ErrorState(
+                message = "Couldn't load this studio",
+                modifier = modifier.fillMaxSize(),
+                onRetry = { reloadKey++ },
+            )
+        } else {
+            CircularProgress(modifier = modifier)
+        }
     }
 }
 

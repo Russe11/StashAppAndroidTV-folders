@@ -247,6 +247,10 @@ class DefaultLongClicker(
                     )
                 }
             }
+        // The produced action items are presented by DialogPopup (see Dialogs.kt): a centered
+        // focus-trap Dialog on TV, and a native Material ModalBottomSheet on touch. We only
+        // build the List<DialogItem> here; branching the presentation lives at that single funnel
+        // so this LongClicker contract (and every StashGrid/Card caller) stays unchanged.
         onLongClick.invoke(DialogParams(true, title, items))
     }
 }

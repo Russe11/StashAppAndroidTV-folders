@@ -97,6 +97,7 @@ import com.github.damontecres.stashapp.ui.FontAwesome
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.LocalPlayerContext
 import com.github.damontecres.stashapp.ui.compat.Card
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.LongClicker
 import com.github.damontecres.stashapp.ui.enableMarquee
 import com.github.damontecres.stashapp.ui.util.playOnClickSound
@@ -427,6 +428,9 @@ fun RootCard(
                 imageOverlay.invoke(this)
             }
         }
+        // On touch there is no D-pad focus to trigger the title marquee, so always animate it
+        // there; on TV keep the existing focus-gated behavior.
+        val titleMarqueeEnabled = focusedAfterDelay || isNotTvDevice
         Column(modifier = Modifier.padding(6.dp)) {
             // Title
             ProvideTextStyle(MaterialTheme.typography.titleMedium) {
@@ -436,7 +440,7 @@ fun RootCard(
                     maxLines = 1,
                     modifier =
                         Modifier
-                            .enableMarquee(focusedAfterDelay),
+                            .enableMarquee(titleMarqueeEnabled),
                 )
             }
             // Subtitle

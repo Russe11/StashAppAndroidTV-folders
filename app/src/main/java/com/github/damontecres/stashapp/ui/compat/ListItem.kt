@@ -122,8 +122,9 @@ fun ListItem(
                         disabledLeadingIconColor = colors.disabledContentColor,
                         disabledTrailingIconColor = colors.disabledContentColor,
                     ),
-                //            tonalElevation = TODO(),
-//            shadowElevation = TODO()
+                // Map the TV tonalElevation onto the Material3 ListItem so the phone surface tint
+                // matches what callers requested instead of always being flat.
+                tonalElevation = tonalElevation,
             )
         }
     }

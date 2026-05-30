@@ -3,6 +3,7 @@ package com.github.damontecres.stashapp.setup
 import android.os.Bundle
 import android.text.InputType
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.GuidanceStylist
 import androidx.leanback.widget.GuidedAction
@@ -101,11 +102,32 @@ class SetupStep1ServerUrl : SetupGuidedStepSupportFragment() {
                     is TestResult.Error,
                     TestResult.SslRequired,
                     -> {
-                        // no-op
+                        // The connection failed (bad/unreachable URL, plain-HTTP, etc.).
+                        // Surface the reason so the user understands why setup didn't proceed:
+                        // inline on the OK action's description AND a guaranteed-visible Toast.
+                        showConnectionError(result.message)
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Make the connection failure clearly visible to the user. Updates the submit action's
+     * description (inline, persistent) and shows a Toast as a guaranteed-visible fallback in
+     * case the action row is scrolled off-screen.
+     */
+    private fun showConnectionError(message: String) {
+        val displayMessage = message.ifBlank { "Could not connect to the server. Check the URL and try again." }
+        val okAction = findActionById(GuidedAction.ACTION_ID_OK)
+        if (okAction != null) {
+            okAction.description = displayMessage
+            notifyActionChanged(findActionPositionById(GuidedAction.ACTION_ID_OK))
+        }
+        Toast
+            .makeText(requireContext(), displayMessage, Toast.LENGTH_LONG)
+            .show()
+        Log.w(TAG, "Connection test failed: $message")
     }
 
     companion object {

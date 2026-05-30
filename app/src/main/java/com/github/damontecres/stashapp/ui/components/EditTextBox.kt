@@ -52,6 +52,8 @@ fun EditTextBox(
     enabled: Boolean = true,
     readOnly: Boolean = false,
     height: Dp = 40.dp,
+    singleLine: Boolean = true,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     isInputValid: (String) -> Boolean = { true },
     supportingText: @Composable (() -> Unit)? = null,
     placeholder: @Composable (() -> Unit)? = null,
@@ -78,7 +80,11 @@ fun EditTextBox(
                         .defaultMinSize(
                             minWidth = TextFieldDefaults.MinWidth,
                             minHeight = height,
-                        ).height(height),
+                        ).let {
+                            // Single-line fields keep their exact fixed height; multi-line fields
+                            // are allowed to grow with their content.
+                            if (singleLine) it.height(height) else it
+                        },
                 onValueChange = onValueChange,
                 enabled = enabled,
                 readOnly = readOnly,
@@ -87,8 +93,8 @@ fun EditTextBox(
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
                 interactionSource = interactionSource,
-                singleLine = true,
-                maxLines = 1,
+                singleLine = singleLine,
+                maxLines = maxLines,
                 minLines = 1,
                 visualTransformation =
                     if (keyboardOptions.keyboardType == KeyboardType.Password ||
@@ -120,7 +126,7 @@ fun EditTextBox(
                             suffix = null,
                             supportingText = supportingText,
                             shape = CircleShape,
-                            singleLine = true,
+                            singleLine = singleLine,
                             enabled = enabled,
                             isError = false,
                             interactionSource = interactionSource,
