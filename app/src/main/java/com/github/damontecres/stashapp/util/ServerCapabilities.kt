@@ -26,6 +26,13 @@ data class ServerCapabilities(
     val supportsMoveFolder: Boolean get() = supports(FEATURE_MOVE_FOLDER)
     val supportsFolderCounts: Boolean get() = supports(FEATURE_FOLDER_COUNTS)
 
+    /**
+     * NG real-time live-refresh: the server advertises the `entityChanged` subscription. Gates
+     * [com.github.damontecres.stashapp.util.LiveRefreshRepository]; absent ⇒ fall back to the
+     * existing poll/delta-sync path.
+     */
+    val supportsEntityChanged: Boolean get() = supports(FEATURE_ENTITY_CHANGED)
+
     companion object {
         const val EDITION_NG = "ng"
         const val EDITION_UPSTREAM = "upstream"
@@ -34,6 +41,7 @@ data class ServerCapabilities(
         const val FEATURE_MOVE_FOLDER = "moveFolder"
         const val FEATURE_FOLDER_COUNTS = "folderCounts"
         const val FEATURE_WEBHOOKS = "webhooks"
+        const val FEATURE_ENTITY_CHANGED = "entityChanged"
 
         /**
          * The capabilities of a server that does not answer `serverCapabilities` (i.e. plain

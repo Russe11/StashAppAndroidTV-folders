@@ -6,3 +6,15 @@ subscription JobProgress {
         }
     }
 }
+
+# NG live-refresh: metadata-only entity change feed. Gate consumption on
+# serverCapabilities.features containing "entityChanged" (see ServerCapabilities). The
+# payload carries IDs only — clients refetch the changed entity by id (or prune on Destroy).
+subscription EntityChanged($types: [String!]) {
+    entityChanged(types: $types) {
+        entity
+        id
+        operation
+        time
+    }
+}

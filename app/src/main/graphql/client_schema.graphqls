@@ -4,3 +4,45 @@ extend schema @link(
 )
 
 extend schema @catchByDefault(to: NULL)
+
+# --- NG real-time: entityChanged subscription (local schema extension) -------------------
+#
+# The pinned `stash-server` submodule tracks an older NG server whose schema predates the
+# `entityChanged` subscription (server commit 0c4fc107). Repointing the submodule is Wave-2,
+# Stream-H work (NG-awareness), out of scope for this live-refresh stream, so we extend the
+# local schema here so Apollo codegen produces the `EntityChangedSubscription` operation. The
+# shape is copied VERBATIM from the server contract
+# (`Stash/graphql/schema/types/entity-change-event.graphql` + the Subscription field in
+# `schema.graphql`) per the one-contract invariant — do not rename or "improve" it.
+#
+# When the submodule is later repointed to a server that already declares these, delete this
+# block (and the matching `type Subscription`/`scalar Time` shims) to avoid a duplicate-type
+# codegen error: the concatenated schema must declare each type exactly once.
+#
+# `Time` is already declared by the submodule (`types/scalars.graphql`), so we only `extend`
+# the existing `Subscription` type rather than redeclaring it.
+extend type Subscription {
+    """
+    NG-only. A real-time stream of metadata-only entity change events
+    (create/update/destroy). Optionally filter by entity kind via `types`
+    (e.g. ["Scene", "Tag"]); a nil/empty list streams all kinds. The payload carries no
+    titles or paths — clients refetch the changed entity by id (or prune it on destroy).
+    Gate consumption on serverCapabilities.features containing "entityChanged".
+    """
+    entityChanged(types: [String!]): EntityChangeEvent!
+}
+
+"""
+NG-only. A metadata-only notification that a tracked top-level entity was created, updated, or
+destroyed. kind + id + operation + time ONLY — deliberately NO titles, paths, or other content.
+"""
+type EntityChangeEvent {
+    "The entity kind that changed, e.g. \"Scene\", \"Tag\", \"Performer\", \"Gallery\", \"Image\", \"Studio\", \"Group\", \"SceneMarker\", \"GalleryChapter\"."
+    entity: String!
+    "The affected entity's id."
+    id: ID!
+    "The operation that occurred: \"Create\", \"Update\", or \"Destroy\"."
+    operation: String!
+    "When the change occurred."
+    time: Time!
+}
