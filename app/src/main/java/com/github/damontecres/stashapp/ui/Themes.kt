@@ -1,10 +1,13 @@
 package com.github.damontecres.stashapp.ui
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
@@ -30,6 +33,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 val FontAwesome = FontFamily(Font(resId = R.font.fa_solid_900))
+
+/**
+ * Sentinel theme name selecting the platform "Material You" dynamic color scheme.
+ * Only honored on API 31+ (Android 12 / Android TV 12+); falls back to the default on older devices.
+ */
+const val DYNAMIC_THEME_NAME = "dynamic"
 
 val defaultColorSchemeSet =
     ColorSchemeSet(
@@ -81,8 +90,35 @@ fun getTheme(
     isSystemInDarkTheme: Boolean = false,
 ): AppColorScheme {
     val useDark = forceDark || isSystemInDarkTheme
+
+    if (themeName == DYNAMIC_THEME_NAME && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val dynLight =
+            AppColorScheme(
+                dynamicLightColorScheme(context),
+                dynamicLightColorScheme(context).inversePrimary,
+            )
+        val dynDark =
+            AppColorScheme(
+                dynamicDarkColorScheme(context),
+                dynamicDarkColorScheme(context).inversePrimary,
+            )
+        val dynamicSet =
+            ColorSchemeSet(
+                description = "dynamic",
+                seed = null,
+                border = dynDark.colorScheme.inversePrimary,
+                light = dynLight,
+                dark = dynDark,
+            )
+        currentColorSchemeSet = dynamicSet
+        return chooseColorScheme(themeStyle, useDark, dynamicSet)
+    }
+
     val colorSchemeSet =
-        if (themeName.isNotNullOrBlank() && !themeName.equals("default", true)) {
+        if (themeName.isNotNullOrBlank() &&
+            !themeName.equals("default", true) &&
+            themeName != DYNAMIC_THEME_NAME
+        ) {
             try {
                 readThemeJson(context, themeName)
             } catch (ex: Exception) {
