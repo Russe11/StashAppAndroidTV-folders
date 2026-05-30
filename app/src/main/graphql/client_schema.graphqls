@@ -106,9 +106,10 @@ type DevicePresenceEvent {
 }
 
 """
-A command relayed from a controller to this target device. fromDeviceId is currently always the
-empty string on the wire (DeviceCommandInput has no controller-id field yet) — do not rely on it
-for TOFU until the server adds it.
+A command relayed from a controller to this target device. fromDeviceId is the controller's own
+registered device id: the server stamps DeviceCommandInput.fromDeviceId onto the relay, so the
+target can TOFU-confirm per controller (it is rejected with `false` server-side when empty rather
+than relayed as "").
 """
 type DeviceCommandEvent {
     fromDeviceId: ID!
@@ -137,6 +138,8 @@ input PlaybackStateInput {
 
 "A command from a controller to a target device (relayed by the server to the target)."
 input DeviceCommandInput {
+    "The controller sending the command (its own registered device id). The server stamps this onto the relayed DeviceCommandEvent.fromDeviceId so the target can TOFU-confirm per controller."
+    fromDeviceId: ID!
     targetDeviceId: ID!
     type: DeviceCommandType!
     sceneId: ID

@@ -184,11 +184,17 @@ class DeviceBusRepository(
      * Send a remote command from this device (acting as a CONTROLLER — R-C) to a target device. The
      * server relays it; returns true only if a live target subscriber received it. No-op returning
      * false when presence isn't active (this device hasn't opted in / registered).
+     *
+     * Stamps THIS device's own registered id ([deviceId] — the same id used for `registerDevice`,
+     * from [DeviceIdentity]/EncryptedSharedPreferences) onto the command's `fromDeviceId`, so the
+     * server can relay a non-empty controller identity onto `DeviceCommandEvent.fromDeviceId` and the
+     * target can TOFU-confirm per controller. Any caller-supplied `fromDeviceId` is overridden — the
+     * controller's own registered id is the only authoritative source.
      */
     suspend fun sendCommand(command: OutgoingDeviceCommand): Boolean {
         if (!active) return false
         return try {
-            sendCommandFn(command)
+            sendCommandFn(command.copy(fromDeviceId = deviceId))
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {

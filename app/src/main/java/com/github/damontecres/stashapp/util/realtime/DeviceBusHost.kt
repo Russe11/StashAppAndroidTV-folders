@@ -120,8 +120,9 @@ object DeviceBusHost {
     /**
      * Best-effort friendly name for a controller device id, looked up in the current online-devices
      * list. Used by the TOFU prompt ("Allow <name> to control this device?"). Falls back to a generic
-     * label when the controller can't be resolved (e.g. the server didn't send a controller id —
-     * `fromDeviceId` is currently always empty, see SERVER_SCHEMA notes).
+     * label when the controller can't be resolved (an unknown id, or a legacy server that still
+     * relays an empty `fromDeviceId` — the controller now stamps its own registered id, see
+     * `DeviceBusRepository.sendCommand`).
      */
     fun controllerName(fromDeviceId: String): String {
         val id = fromDeviceId.trim()

@@ -86,6 +86,7 @@ class DeviceBusEngine(
     suspend fun sendDeviceCommand(command: OutgoingDeviceCommand): Boolean {
         val input =
             DeviceCommandInput(
+                fromDeviceId = command.fromDeviceId,
                 targetDeviceId = command.targetDeviceId,
                 type = command.type.toApi(),
                 sceneId = Optional.presentIfNotNull(command.sceneId),
@@ -118,7 +119,15 @@ data class PlaybackStateUpdate(
     val paused: Boolean,
 )
 
-/** A command this controller is sending to a target. */
+/**
+ * A command this controller is sending to a target.
+ *
+ * [fromDeviceId] is THIS controller's own registered device id — the same stable id used for
+ * `registerDevice` (from [DeviceIdentity]/EncryptedSharedPreferences). The server stamps it onto the
+ * relayed `DeviceCommandEvent.fromDeviceId` so the target can TOFU-confirm per controller. Callers
+ * (the "send to device" UI) need not set it: [DeviceBusRepository.sendCommand] stamps this device's
+ * own registered id before the command goes on the wire, so it is always the authoritative identity.
+ */
 data class OutgoingDeviceCommand(
     val targetDeviceId: String,
     val type: DeviceCommandType,
@@ -126,6 +135,7 @@ data class OutgoingDeviceCommand(
     val sceneIds: List<String> = emptyList(),
     val startSeconds: Double? = null,
     val seekSeconds: Double? = null,
+    val fromDeviceId: String = "",
 )
 
 private fun DeviceKind.toApi(): ApiDeviceKind = ApiDeviceKind.safeValueOf(name)

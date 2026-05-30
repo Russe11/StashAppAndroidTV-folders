@@ -155,6 +155,122 @@ class DeviceBusRepositoryTest {
         }
 
     @Test
+    fun sendCommand_stampsThisDevicesOwnRegisteredId() =
+        runBlocking {
+            val sent = arrayOfNulls<OutgoingDeviceCommand>(1)
+            val repo =
+                DeviceBusRepository(
+                    server = fakeServer(),
+                    registration = { registration }, // registration.id == "self"
+                    scope = CoroutineScope(coroutineContext + Job()),
+                    capabilityGate = { true },
+                    optInGate = { true },
+                    register = { },
+                    fetchDevices = { emptyList() },
+                    presenceFlow = { flowOf() },
+                    commandFlow = { flowOf() },
+                    sendCommandFn = { cmd ->
+                        sent[0] = cmd
+                        true
+                    },
+                    delayFn = { yield() },
+                )
+            repo.start()
+            repeat(10) { yield() }
+
+            // The controller UI supplies only target + intent — NOT a controller id.
+            val ok =
+                repo.sendCommand(
+                    OutgoingDeviceCommand(
+                        targetDeviceId = "tv-1",
+                        type = DeviceCommandType.PAUSE,
+                    ),
+                )
+
+            assertTrue("relay reported the target received it", ok)
+            val command = sent[0]
+            assertTrue("a command went on the wire", command != null)
+            // The repository stamped THIS device's own registered id (same id used for registerDevice).
+            assertEquals(
+                "fromDeviceId is this device's own registered id",
+                "self",
+                command!!.fromDeviceId,
+            )
+            assertTrue("fromDeviceId is non-empty so the server won't reject it", command.fromDeviceId.isNotEmpty())
+            assertEquals("target preserved", "tv-1", command.targetDeviceId)
+            repo.stop()
+        }
+
+    @Test
+    fun sendCommand_overridesAnyCallerSuppliedControllerId() =
+        runBlocking {
+            val sent = arrayOfNulls<OutgoingDeviceCommand>(1)
+            val repo =
+                DeviceBusRepository(
+                    server = fakeServer(),
+                    registration = { registration }, // registration.id == "self"
+                    scope = CoroutineScope(coroutineContext + Job()),
+                    capabilityGate = { true },
+                    optInGate = { true },
+                    register = { },
+                    fetchDevices = { emptyList() },
+                    presenceFlow = { flowOf() },
+                    commandFlow = { flowOf() },
+                    sendCommandFn = { cmd ->
+                        sent[0] = cmd
+                        true
+                    },
+                    delayFn = { yield() },
+                )
+            repo.start()
+            repeat(10) { yield() }
+
+            repo.sendCommand(
+                OutgoingDeviceCommand(
+                    targetDeviceId = "tv-1",
+                    type = DeviceCommandType.PLAY,
+                    sceneId = "42",
+                    fromDeviceId = "spoofed", // a caller can't impersonate another controller
+                ),
+            )
+
+            assertEquals(
+                "the controller's own registered id wins over any caller-supplied value",
+                "self",
+                sent[0]!!.fromDeviceId,
+            )
+            repo.stop()
+        }
+
+    @Test
+    fun sendCommand_noopFalseWhenInactive() =
+        runBlocking {
+            val sends = AtomicInteger(0)
+            val repo =
+                DeviceBusRepository(
+                    server = fakeServer(),
+                    registration = { registration },
+                    scope = CoroutineScope(coroutineContext + Job()),
+                    capabilityGate = { false }, // not active
+                    optInGate = { true },
+                    register = { },
+                    fetchDevices = { emptyList() },
+                    presenceFlow = { flowOf() },
+                    commandFlow = { flowOf() },
+                    sendCommandFn = {
+                        sends.incrementAndGet()
+                        true
+                    },
+                )
+            repo.start() // gated off ⇒ inactive
+
+            val ok = repo.sendCommand(OutgoingDeviceCommand("tv-1", DeviceCommandType.PAUSE))
+
+            assertFalse("inactive controller does not send", ok)
+            assertEquals("no command on the wire while inactive", 0, sends.get())
+        }
+
+    @Test
     fun stop_unregistersForGracefulOffline() =
         runBlocking {
             val unregistered = AtomicBoolean(false)
