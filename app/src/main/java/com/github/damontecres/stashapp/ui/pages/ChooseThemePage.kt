@@ -100,7 +100,7 @@ fun ChooseThemePage(
 
     var showDialog by remember { mutableStateOf(false) }
     LazyColumn(
-        modifier = modifier.background(Color.Black),
+        modifier = modifier.background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
