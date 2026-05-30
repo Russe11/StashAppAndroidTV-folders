@@ -16,6 +16,8 @@ import com.github.damontecres.stashapp.util.ComposePager
 import com.github.damontecres.stashapp.util.LoggingCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.realtime.LiveRefreshHost
+import com.github.damontecres.stashapp.util.realtime.LiveRefreshListGlue
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -28,6 +30,22 @@ class FilterViewModel : ViewModel() {
 
     private var job: Job? = null
 
+    // The columns last used to build the pager, so a live-refresh rebuild matches the on-screen grid.
+    private var columns: Int = 1
+
+    init {
+        // R1 live-refresh UI invalidation: when the server reports this list's DataType changed
+        // (entityChanged WS), rebuild the pager so the grid reflects the change. Lifecycle-safe —
+        // collected in viewModelScope, so it's cancelled when the ViewModel is cleared (no leak).
+        // On servers that don't advertise entityChanged the host's flow simply never emits.
+        LiveRefreshListGlue.collectInto(
+            scope = viewModelScope,
+            signals = LiveRefreshHost.refreshSignals,
+            currentDataType = { dataType },
+            invalidate = { reload() },
+        )
+    }
+
     fun setFilter(
         server: StashServer,
         filterArgs: FilterArgs,
@@ -37,6 +55,7 @@ class FilterViewModel : ViewModel() {
             job?.cancel()
             Log.d("FilterPageViewModel", "filterArgs=$filterArgs, columns=$columns")
             this.server = server
+            this.columns = columns
             val dataSupplierFactory = DataSupplierFactory(server.version)
             val dataSupplier =
                 dataSupplierFactory.create<Query.Data, StashData, Query.Data>(filterArgs)
@@ -50,6 +69,31 @@ class FilterViewModel : ViewModel() {
                     this@FilterViewModel.pager.value = pager
                 }
         }
+    }
+
+    /**
+     * Rebuild the pager for the current server+filter, re-fetching from the server. Used by
+     * live-refresh: [setFilter] short-circuits when the filter is unchanged, so this builds a fresh
+     * [ComposePager] directly (a fresh pager re-runs the count + page queries, surfacing the change).
+     * No-ops until a filter has been set.
+     */
+    private fun reload() {
+        val server = this.server ?: return
+        val filterArgs = pager.value?.filter ?: return
+        job?.cancel()
+        Log.d("FilterPageViewModel", "live-refresh reload filterArgs=$filterArgs")
+        val dataSupplierFactory = DataSupplierFactory(server.version)
+        val dataSupplier =
+            dataSupplierFactory.create<Query.Data, StashData, Query.Data>(filterArgs)
+        val pagingSource =
+            StashPagingSource(QueryEngine(server), dataSupplier) { _, _, item -> item }
+        val pager =
+            ComposePager(filterArgs, pagingSource, viewModelScope, pageSize = columns * 10)
+        job =
+            viewModelScope.launch(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
+                pager.init()
+                this@FilterViewModel.pager.value = pager
+            }
     }
 
     suspend fun findLetterPosition(letter: Char): Int {
