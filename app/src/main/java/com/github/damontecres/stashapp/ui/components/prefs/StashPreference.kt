@@ -152,6 +152,31 @@ sealed interface StashPreference<T> {
                 summaryOn = R.string.block_screenshots_summary_on,
                 summaryOff = R.string.block_screenshots_summary_off,
             )
+
+        /**
+         * "Privacy & Storage" dashboard: clears the local image cache (Glide disk + memory and the
+         * network response cache). Recoverable — images/requests are re-fetched on demand. The
+         * actual wipe is [com.github.damontecres.stashapp.SettingsFragment.clearCaches], which runs
+         * Glide's `clearDiskCache` off the main thread and `clearMemory` on it.
+         */
+        val ClearImageCache =
+            StashClickablePreference(
+                title = R.string.clear_image_cache,
+                summary = R.string.clear_image_cache_summary,
+            )
+
+        /**
+         * "Privacy & Storage" dashboard: clears the on-device Room "Folders / New" library index
+         * for the current server and resets its delta-sync watermark, so the next open re-syncs
+         * from the server. Reuses the existing safe force-resync path
+         * ([com.github.damontecres.stashapp.folders.ui.LibraryIndexerBridge.forceResync]) — it does
+         * not touch any indexer internals or server data.
+         */
+        val ClearLibraryCache =
+            StashClickablePreference(
+                title = R.string.clear_library_cache,
+                summary = R.string.clear_library_cache_summary,
+            )
         val CardSize =
             StashChoicePreference<Int>(
                 title = R.string.card_size_title,

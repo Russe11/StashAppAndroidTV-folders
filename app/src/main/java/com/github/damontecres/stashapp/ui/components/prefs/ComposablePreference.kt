@@ -42,6 +42,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.surfaceColorAtElevation
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.SettingsFragment
+import com.github.damontecres.stashapp.folders.ui.LibraryIndexerBridge
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.ui.compat.Button
 import com.github.damontecres.stashapp.ui.components.DialogItem
@@ -51,6 +52,7 @@ import com.github.damontecres.stashapp.ui.components.server.ConfigurePin
 import com.github.damontecres.stashapp.ui.pages.DialogParams
 import com.github.damontecres.stashapp.util.AppUpgradeHandler
 import com.github.damontecres.stashapp.util.MutationEngine
+import com.github.damontecres.stashapp.util.PrivacyStorageActions
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
@@ -79,6 +81,8 @@ fun <T> ComposablePreference(
     var showPinDialog by remember { mutableStateOf<StashPinPreference?>(null) }
     var showStringDialog by remember { mutableStateOf<StringInput?>(null) }
     var showConfirmOldUiDialog by remember { mutableStateOf(false) }
+    var showClearImageCacheConfirm by remember { mutableStateOf(false) }
+    var showClearLibraryCacheConfirm by remember { mutableStateOf(false) }
 
     val title = stringResource(preference.title)
 
@@ -210,6 +214,37 @@ fun <T> ComposablePreference(
                     )
                 }
             }
+        }
+
+        StashPreference.ClearImageCache -> {
+            // Privacy & Storage dashboard. Show the approximate on-disk size when there's anything
+            // to free, then confirm before wiping. The wipe itself runs Glide.clearDiskCache off
+            // the main thread (see SettingsFragment.clearCaches).
+            val baseSummary = stringResource(R.string.clear_image_cache_summary)
+            val summary =
+                if (PrivacyStorageActions.shouldShowImageCacheSize(cacheUsage)) {
+                    val size = formatBytes(PrivacyStorageActions.imageCacheBytes(cacheUsage))
+                    "$baseSummary\n" + stringResource(R.string.clear_image_cache_using, size)
+                } else {
+                    baseSummary
+                }
+            ClickPreference(
+                title = title,
+                onClick = { showClearImageCacheConfirm = true },
+                summary = summary,
+                interactionSource = interactionSource,
+                modifier = modifier,
+            )
+        }
+
+        StashPreference.ClearLibraryCache -> {
+            ClickPreference(
+                title = title,
+                onClick = { showClearLibraryCacheConfirm = true },
+                summary = stringResource(R.string.clear_library_cache_summary),
+                interactionSource = interactionSource,
+                modifier = modifier,
+            )
         }
 
         is StashDestinationPreference -> {
@@ -546,6 +581,55 @@ fun <T> ComposablePreference(
             )
         }
     }
+    // Privacy & Storage: confirm before clearing the image cache, then give "done" feedback.
+    DialogPopup(
+        showDialog = showClearImageCacheConfirm,
+        title = stringResource(R.string.clear_image_cache_confirm_title),
+        dialogItems =
+            listOf(
+                DialogItem(stringResource(R.string.clear_image_cache_confirm)) {
+                    scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                        SettingsFragment.clearCaches(context)
+                        onCacheClear.invoke()
+                        Toast
+                            .makeText(context, R.string.image_cache_cleared, Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                },
+                DialogItem(stringResource(R.string.clear_action_cancel)) { },
+            ),
+        onDismissRequest = { showClearImageCacheConfirm = false },
+        waitToLoad = false,
+    )
+    // Privacy & Storage: confirm before wiping the local library index (recoverable — re-syncs).
+    DialogPopup(
+        showDialog = showClearLibraryCacheConfirm,
+        title = stringResource(R.string.clear_library_cache_confirm_title),
+        dialogItems =
+            listOf(
+                DialogItem(stringResource(R.string.clear_library_cache_confirm)) {
+                    val currentServer = StashServer.getCurrentStashServer()
+                    if (currentServer == null) {
+                        Toast
+                            .makeText(context, R.string.library_cache_no_server, Toast.LENGTH_SHORT)
+                            .show()
+                    } else {
+                        scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                            // Reuse the existing safe force-resync path: it wipes the Room
+                            // scenes/folders/sync-state for this server (FolderDao.clearForServer)
+                            // and kicks off a fresh sync. No indexer internals touched here.
+                            LibraryIndexerBridge.forceResync(currentServer.url)
+                            Toast
+                                .makeText(context, R.string.library_cache_cleared, Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    }
+                },
+                DialogItem(stringResource(R.string.clear_action_cancel)) { },
+            ),
+        onDismissRequest = { showClearLibraryCacheConfirm = false },
+        waitToLoad = false,
+    )
 }
 
 val PreferenceTitleStyle: TextStyle

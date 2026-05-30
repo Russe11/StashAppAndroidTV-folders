@@ -71,12 +71,23 @@ val basicPreferences =
             ),
         ),
         PreferenceGroup(
-            R.string.basic_interface,
+            R.string.privacy_storage,
             listOf(
+                // Privacy controls: these reference the existing PIN/biometric/screenshot prefs —
+                // no toggle logic is duplicated, they are just consolidated here with plain-language
+                // descriptions of what each protects.
                 StashPreference.PinCode,
                 StashPreference.RequireBiometric,
                 StashPreference.BlockScreenshots,
                 StashPreference.ReadOnlyMode,
+                // Storage controls: clear the device-local caches. Neither touches server data.
+                StashPreference.ClearImageCache,
+                StashPreference.ClearLibraryCache,
+            ),
+        ),
+        PreferenceGroup(
+            R.string.basic_interface,
+            listOf(
                 StashPreference.CardSize,
                 StashPreference.PlayVideoPreviews,
                 StashPreference.MoreUiSettings,
@@ -289,6 +300,10 @@ fun PreferencesContent(
         onUpdateTitle?.invoke(AnnotatedString(screenTitle))
         if (preferenceScreenOption == PreferenceScreenOption.ADVANCED) {
             viewModel.init(context, server)
+        } else if (preferenceScreenOption == PreferenceScreenOption.BASIC) {
+            // The Privacy & Storage section's "Clear image cache" entry shows approximate disk
+            // usage; the BASIC screen doesn't need the full job-queue init, just the cache sizes.
+            viewModel.updateCacheUsage(context)
         }
     }
     val jobQueue by viewModel.runningJobs.observeAsState(listOf())

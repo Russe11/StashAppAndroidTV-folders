@@ -182,6 +182,22 @@
     <string name="block_screenshots">Block screenshots &amp; hide in recents</string>
     <string name="block_screenshots_summary_on">Screenshots, screen recording and casting are blocked, and the app is blanked in the recents/app-switcher (takes effect on next launch)</string>
     <string name="block_screenshots_summary_off">Screenshots and the recents preview are allowed (takes effect on next launch)</string>
+    <!-- Privacy &amp; Storage dashboard -->
+    <string name="privacy_storage">Privacy &amp; Storage</string>
+    <string name="privacy_storage_summary">Control who can open the app and what stays on this device. None of these touch your Stash server.</string>
+    <string name="clear_image_cache">Clear image cache</string>
+    <string name="clear_image_cache_summary">Removes cached thumbnails and previews stored on this device. They are re-downloaded as you browse.</string>
+    <string name="clear_image_cache_using">Using %1$s on disk</string>
+    <string name="clear_image_cache_confirm_title">Clear cached images?</string>
+    <string name="clear_image_cache_confirm">Clear image cache</string>
+    <string name="image_cache_cleared">Image cache cleared</string>
+    <string name="clear_library_cache">Clear local library index</string>
+    <string name="clear_library_cache_summary">Wipes this device\'s cached Folders / New index and re-syncs it from the server next time you open it.</string>
+    <string name="clear_library_cache_confirm_title">Clear the local library index? It will re-sync from the server, which can take a few minutes.</string>
+    <string name="clear_library_cache_confirm">Clear and re-sync</string>
+    <string name="library_cache_cleared">Local library index cleared; it will re-sync from the server</string>
+    <string name="library_cache_no_server">Connect to a server first</string>
+    <string name="clear_action_cancel">Cancel</string>
     <string name="biometric_prompt_title">Unlock Stash</string>
     <string name="biometric_prompt_subtitle">Verify it\'s you to continue</string>
     <string name="current_server">Current server</string>
