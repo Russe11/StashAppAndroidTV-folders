@@ -326,8 +326,14 @@ class SceneDetailsViewModel(
     ) {
         loadingState.value = SceneLoadingState.Loading
         viewModelScope.launch(exceptionHandler) {
-            val success = mutationEngine.deleteScene(sceneId, deleteFiles, deleteGenerated)
-            onDeleted(success)
+            val success =
+                dispatchDeleteScene(
+                    mutationEngine,
+                    sceneId,
+                    deleteFiles,
+                    deleteGenerated,
+                    onDeleted,
+                )
             if (!success) {
                 scene?.let { loadingState.value = SceneLoadingState.Success(it) }
             }
@@ -398,4 +404,24 @@ enum class AddRemove {
             list.remove(id)
         }
     }
+}
+
+/**
+ * The delete-scene dispatch seam, extracted from [SceneDetailsViewModel.deleteScene] so it can be
+ * unit-tested headless (the ViewModel itself can't be: it eagerly builds [QueryEngine]/[MutationEngine]
+ * and touches [viewModelScope] in its constructor). Behavior is identical to the inline version: it
+ * calls [MutationEngine.deleteScene] exactly once with the caller's flags and forwards the returned
+ * success boolean to [onDeleted]. No delete *logic* lives here beyond the single mutation call — the
+ * disk-delete gating happens upstream in the dialog (see DeleteDialog.deleteConfirmAction).
+ */
+internal suspend fun dispatchDeleteScene(
+    mutationEngine: MutationEngine,
+    sceneId: String,
+    deleteFiles: Boolean,
+    deleteGenerated: Boolean,
+    onDeleted: (Boolean) -> Unit,
+): Boolean {
+    val success = mutationEngine.deleteScene(sceneId, deleteFiles, deleteGenerated)
+    onDeleted(success)
+    return success
 }
