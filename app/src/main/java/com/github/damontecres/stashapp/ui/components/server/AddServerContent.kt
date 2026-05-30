@@ -6,12 +6,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,6 +39,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -47,9 +52,11 @@ import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.ui.PreviewTheme
 import com.github.damontecres.stashapp.ui.compat.Button
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.EditTextBox
 import com.github.damontecres.stashapp.ui.components.SwitchWithLabel
+import com.github.damontecres.stashapp.ui.theme.SemanticColors
 import com.github.damontecres.stashapp.ui.tryRequestFocus
 import com.github.damontecres.stashapp.util.LocalDebugSetup
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
@@ -126,6 +133,94 @@ fun AddServer(
 
     val labelWidth = if (usePassword) 88.dp else 72.dp
 
+    val touchDevice = isNotTvDevice
+
+    if (touchDevice) {
+        AddServerTouchForm(
+            serverUrl = serverUrl,
+            onServerUrlChange = { serverUrl = it },
+            username = username,
+            onUsernameChange = { username = it },
+            apiKey = apiKey,
+            onApiKeyChange = { apiKey = it },
+            usePassword = usePassword,
+            onUsePasswordChange = {
+                apiKey = null
+                usePassword = it
+            },
+            showApiKey = showApiKey,
+            onShowApiKeyChange = { showApiKey = it },
+            connectionState = connectionState,
+            onTestConnection = {
+                viewModel.testServer(serverUrl, apiKey, trustCerts, username, usePassword)
+            },
+            modifier = modifier,
+        )
+    } else {
+        AddServerTvForm(
+            serverUrl = serverUrl,
+            onServerUrlChange = { serverUrl = it },
+            username = username,
+            onUsernameChange = { username = it },
+            apiKey = apiKey,
+            onApiKeyChange = { apiKey = it },
+            usePassword = usePassword,
+            onUsePasswordChange = {
+                apiKey = null
+                usePassword = it
+            },
+            showApiKey = showApiKey,
+            onShowApiKeyChange = { showApiKey = it },
+            connectionState = connectionState,
+            labelWidth = labelWidth,
+            testButtonFocusRequester = testButtonFocusRequester,
+            onTestConnection = {
+                viewModel.testServer(serverUrl, apiKey, trustCerts, username, usePassword)
+            },
+            modifier = modifier,
+        )
+    }
+    AnimatedVisibility(showTrustDialog) {
+        AllowSelfSignedCertsDialog(
+            onDismissRequest = { showTrustDialog = false },
+            onEnableTrust = {
+                scope.launch(StashCoroutineExceptionHandler()) {
+                    context.preferences.updateData {
+                        it.updateAdvancedPreferences {
+                            trustSelfSignedCertificates = true
+                        }
+                    }
+                }
+                trustCerts = true
+                if (localDebugCredentials != null) {
+                    localDebugAutoSetupStarted = false
+                }
+            },
+        )
+    }
+}
+
+/**
+ * TV layout: label-in-a-Row + [EditTextBox], unchanged from the original behavior.
+ */
+@Composable
+private fun AddServerTvForm(
+    serverUrl: String,
+    onServerUrlChange: (String) -> Unit,
+    username: String,
+    onUsernameChange: (String) -> Unit,
+    apiKey: String?,
+    onApiKeyChange: (String) -> Unit,
+    usePassword: Boolean,
+    onUsePasswordChange: (Boolean) -> Unit,
+    showApiKey: Boolean,
+    onShowApiKeyChange: (Boolean) -> Unit,
+    connectionState: ConnectionState,
+    labelWidth: androidx.compose.ui.unit.Dp,
+    testButtonFocusRequester: FocusRequester,
+    onTestConnection: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -167,7 +262,7 @@ fun AddServer(
                 )
                 EditTextBox(
                     value = serverUrl,
-                    onValueChange = { serverUrl = it },
+                    onValueChange = onServerUrlChange,
                     keyboardOptions =
                         KeyboardOptions(
                             autoCorrectEnabled = false,
@@ -209,7 +304,7 @@ fun AddServer(
                     )
                     EditTextBox(
                         value = username,
-                        onValueChange = { username = it },
+                        onValueChange = onUsernameChange,
                         keyboardOptions =
                             KeyboardOptions(
                                 autoCorrectEnabled = false,
@@ -259,7 +354,7 @@ fun AddServer(
                 )
                 EditTextBox(
                     value = apiKey ?: "",
-                    onValueChange = { apiKey = it },
+                    onValueChange = onApiKeyChange,
                     keyboardOptions =
                         KeyboardOptions(
                             autoCorrectEnabled = false,
@@ -294,7 +389,7 @@ fun AddServer(
                         } else {
                             {
                                 Text(
-                                    text = "Optional, if needed",
+                                    text = stringResource(R.string.setup_api_key_optional_hint),
                                     color =
                                         MaterialTheme.colorScheme.onSecondaryContainer.copy(
                                             alpha = .25f,
@@ -310,7 +405,7 @@ fun AddServer(
         if (usePassword) {
             item {
                 Text(
-                    text = "Note: an API key will be fetched or generated for the server",
+                    text = stringResource(R.string.setup_api_key_note),
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
@@ -331,18 +426,20 @@ fun AddServer(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     SwitchWithLabel(
-                        label = "Use username",
+                        label = stringResource(R.string.setup_use_username),
                         checked = usePassword,
-                        onStateChange = {
-                            apiKey = null
-                            usePassword = it
-                        },
+                        onStateChange = onUsePasswordChange,
                         modifier = Modifier,
                     )
                     SwitchWithLabel(
-                        label = if (usePassword) "Show password" else "Show API Key",
+                        label =
+                            if (usePassword) {
+                                stringResource(R.string.setup_show_password)
+                            } else {
+                                stringResource(R.string.setup_show_api_key)
+                            },
                         checked = showApiKey,
-                        onStateChange = { showApiKey = it },
+                        onStateChange = onShowApiKeyChange,
                         modifier = Modifier,
                     )
                 }
@@ -355,9 +452,7 @@ fun AddServer(
                 modifier = Modifier.fillParentMaxWidth(),
             ) {
                 Button(
-                    onClick = {
-                        viewModel.testServer(serverUrl, apiKey, trustCerts, username, usePassword)
-                    },
+                    onClick = onTestConnection,
                     enabled = serverUrl.isNotNullOrBlank(),
                     modifier = Modifier.focusRequester(testButtonFocusRequester),
                 ) {
@@ -373,23 +468,258 @@ fun AddServer(
             }
         }
     }
-    AnimatedVisibility(showTrustDialog) {
-        AllowSelfSignedCertsDialog(
-            onDismissRequest = { showTrustDialog = false },
-            onEnableTrust = {
-                scope.launch(StashCoroutineExceptionHandler()) {
-                    context.preferences.updateData {
-                        it.updateAdvancedPreferences {
-                            trustSelfSignedCertificates = true
+}
+
+/**
+ * Touch layout: native [androidx.compose.material3.OutlinedTextField]s stacked vertically,
+ * a full-width primary action button, and the existing reveal/use-username switches.
+ *
+ * Connection/SSL/PIN logic is identical to the TV path — only the presentation differs.
+ */
+@Composable
+private fun AddServerTouchForm(
+    serverUrl: String,
+    onServerUrlChange: (String) -> Unit,
+    username: String,
+    onUsernameChange: (String) -> Unit,
+    apiKey: String?,
+    onApiKeyChange: (String) -> Unit,
+    usePassword: Boolean,
+    onUsePasswordChange: (Boolean) -> Unit,
+    showApiKey: Boolean,
+    onShowApiKeyChange: (Boolean) -> Unit,
+    connectionState: ConnectionState,
+    onTestConnection: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val urlError =
+        connectionState is ConnectionState.DuplicateServer ||
+            (connectionState is ConnectionState.Result && !connectionState.canConnect)
+    val errorMessage =
+        when (connectionState) {
+            is ConnectionState.DuplicateServer -> stringResource(R.string.setup_duplicate_server)
+            is ConnectionState.Result -> connectionState.testResult.message.ifBlank { null }
+            else -> null
+        }
+
+    LazyColumn(
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.focusGroup(),
+    ) {
+        item {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.stash_logo),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(64.dp),
+                )
+            }
+        }
+        item {
+            androidx.compose.material3.Text(
+                text = stringResource(R.string.add_server),
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                textAlign = TextAlign.Center,
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            )
+        }
+
+        // Server url
+        item {
+            androidx.compose.material3.OutlinedTextField(
+                value = serverUrl,
+                onValueChange = onServerUrlChange,
+                label = { androidx.compose.material3.Text(stringResource(R.string.stashapp_url)) },
+                singleLine = true,
+                isError = urlError,
+                supportingText =
+                    if (urlError && errorMessage != null) {
+                        { androidx.compose.material3.Text(errorMessage) }
+                    } else {
+                        null
+                    },
+                keyboardOptions =
+                    KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        capitalization = KeyboardCapitalization.None,
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                    ),
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            )
+        }
+
+        // Username
+        if (usePassword) {
+            item {
+                androidx.compose.material3.OutlinedTextField(
+                    value = username,
+                    onValueChange = onUsernameChange,
+                    label = {
+                        androidx.compose.material3.Text(
+                            stringResource(R.string.stashapp_config_general_auth_username),
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions =
+                        KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            capitalization = KeyboardCapitalization.None,
+                            keyboardType = KeyboardType.Ascii,
+                            imeAction = ImeAction.Next,
+                        ),
+                    modifier =
+                        Modifier
+                            .fillParentMaxWidth()
+                            .widthIn(max = 560.dp),
+                )
+            }
+        }
+
+        // Password / API key
+        item {
+            androidx.compose.material3.OutlinedTextField(
+                value = apiKey ?: "",
+                onValueChange = onApiKeyChange,
+                label = {
+                    androidx.compose.material3.Text(
+                        stringResource(
+                            if (usePassword) {
+                                R.string.stashapp_config_general_auth_password
+                            } else {
+                                R.string.stashapp_config_general_auth_api_key
+                            },
+                        ),
+                    )
+                },
+                singleLine = true,
+                placeholder =
+                    if (usePassword) {
+                        null
+                    } else {
+                        {
+                            androidx.compose.material3.Text(
+                                stringResource(R.string.setup_api_key_optional_hint),
+                            )
                         }
+                    },
+                visualTransformation =
+                    if (showApiKey) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                keyboardOptions =
+                    KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        capitalization = KeyboardCapitalization.None,
+                        keyboardType = if (showApiKey) KeyboardType.Ascii else KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                    ),
+                keyboardActions =
+                    KeyboardActions(
+                        onDone = { onTestConnection() },
+                    ),
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            )
+        }
+
+        if (usePassword) {
+            item {
+                androidx.compose.material3.Text(
+                    text = stringResource(R.string.setup_api_key_note),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    modifier =
+                        Modifier
+                            .fillParentMaxWidth()
+                            .widthIn(max = 560.dp),
+                )
+            }
+        }
+
+        // Reveal control: core material-icons set has no eye/visibility icon, so the
+        // existing "Show password/API key" switch is kept as the visibility toggle.
+        item {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            ) {
+                SwitchWithLabel(
+                    label = stringResource(R.string.setup_use_username),
+                    checked = usePassword,
+                    onStateChange = onUsePasswordChange,
+                    modifier = Modifier,
+                )
+                SwitchWithLabel(
+                    label =
+                        if (usePassword) {
+                            stringResource(R.string.setup_show_password)
+                        } else {
+                            stringResource(R.string.setup_show_api_key)
+                        },
+                    checked = showApiKey,
+                    onStateChange = onShowApiKeyChange,
+                    modifier = Modifier,
+                )
+            }
+        }
+
+        // Status (success message); connection errors are surfaced on the URL field above.
+        item {
+            Box(
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            ) {
+                StatusText(connectionState)
+            }
+        }
+
+        item {
+            Column(
+                modifier =
+                    Modifier
+                        .fillParentMaxWidth()
+                        .widthIn(max = 560.dp),
+            ) {
+                Button(
+                    onClick = onTestConnection,
+                    enabled = serverUrl.isNotNullOrBlank() && connectionState !is ConnectionState.Testing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (connectionState is ConnectionState.Testing) {
+                        CircularProgress(Modifier.size(24.dp), false)
+                    } else {
+                        Text(text = stringResource(R.string.test_connection))
                     }
                 }
-                trustCerts = true
-                if (localDebugCredentials != null) {
-                    localDebugAutoSetupStarted = false
-                }
-            },
-        )
+                Spacer(Modifier.size(8.dp))
+            }
+        }
     }
 }
 
@@ -398,11 +728,12 @@ fun StatusText(
     state: ConnectionState,
     modifier: Modifier = Modifier,
 ) {
+    val duplicateServerMessage = stringResource(R.string.setup_duplicate_server)
     val message =
         state.let {
             when (it) {
                 is ConnectionState.Result -> it.testResult.message.ifBlank { null }
-                is ConnectionState.DuplicateServer -> "Duplicate server"
+                is ConnectionState.DuplicateServer -> duplicateServerMessage
                 else -> null
             }
         }
@@ -415,7 +746,7 @@ fun StatusText(
     } else if (state is ConnectionState.Result && state.testResult is TestResult.Success) {
         Text(
             text = stringResource(R.string.success),
-            color = Color.Green.copy(alpha = .66f),
+            color = SemanticColors.Organized,
             modifier = modifier,
         )
     }
@@ -442,9 +773,7 @@ fun AllowSelfSignedCertsDialog(
         ) {
             item {
                 Text(
-                    text =
-                        "The server may be using a self-signed certificate. Do you want to trust self-signed certificates?\n\n" +
-                            "Note: if enabled, the app must be restarted/force stopped after completing setup!",
+                    text = stringResource(R.string.setup_self_signed_prompt),
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier,
                 )
@@ -460,7 +789,7 @@ fun AllowSelfSignedCertsDialog(
                         modifier = Modifier.focusRequester(focusRequester),
                     ) {
                         Text(
-                            text = "No, go back",
+                            text = stringResource(R.string.setup_self_signed_no),
                         )
                     }
                     Button(
@@ -471,7 +800,7 @@ fun AllowSelfSignedCertsDialog(
                         modifier = Modifier,
                     ) {
                         Text(
-                            text = "Yes",
+                            text = stringResource(R.string.setup_self_signed_yes),
                         )
                     }
                 }
