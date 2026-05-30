@@ -419,6 +419,9 @@ fun ApplicationContent(
                 dismissOnClick = true,
             )
         }
+        // R-C TARGET: surface the first-command-from-an-unknown-controller TOFU prompt from any
+        // screen (inert unless the user is opted into cross-device control).
+        com.github.damontecres.stashapp.ui.components.devicebus.RemoteControlConfirmationHost()
     }
     }
 }

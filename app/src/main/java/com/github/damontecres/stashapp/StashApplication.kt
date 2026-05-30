@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.res.Resources
 import android.graphics.Typeface
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.util.Log
 import androidx.annotation.FontRes
@@ -168,6 +170,44 @@ class StashApplication : Application() {
         com.github.damontecres.stashapp.folders.sync.LibraryIndexerHost.install(
             daoProvider = { database.folderDao() },
         )
+        // NG live-refresh: install the host so it can run the `entityChanged` subscription while
+        // the app is foreground. Capability-gated inside the repository — a no-op on a server
+        // that doesn't advertise `entityChanged`, leaving the existing poll/delta-sync in charge.
+        com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.install(
+            daoProvider = { database.folderDao() },
+        )
+        // NG deviceBus presence: install the host so it can register this device + report presence
+        // while foreground. Double-gated (capability `deviceBus` AND the opt-in toggle, default
+        // OFF) inside the repository — until the user opts in this device never registers and is
+        // invisible to others.
+        com.github.damontecres.stashapp.util.realtime.DeviceBusHost.install(this)
+        // NG deviceBus control (R-C): install the TARGET-side remote-control host. It obeys incoming
+        // `deviceCommands` (PLAY/PAUSE/SEEK/…) in the player, gated by a per-controller TOFU confirm.
+        // The PLAY launcher opens the player on a scene via navigation (main thread); the controller
+        // name comes from the live online-devices list. Only ever exercised while opted in (the
+        // command subscription only runs then).
+        com.github.damontecres.stashapp.util.realtime.RemoteControlHost.install(
+            context = this,
+            sceneLauncher = { sceneId, startSeconds ->
+                Handler(Looper.getMainLooper()).post {
+                    try {
+                        val nav = navigationManager
+                        nav.navigate(
+                            com.github.damontecres.stashapp.navigation.Destination.Playback(
+                                sceneId = sceneId,
+                                position = ((startSeconds ?: 0.0) * 1000).toLong().coerceAtLeast(0L),
+                                mode = com.github.damontecres.stashapp.playback.PlaybackMode.Choose,
+                            ),
+                        )
+                    } catch (ex: Exception) {
+                        Log.w(TAG, "remote PLAY navigation failed for scene $sceneId", ex)
+                    }
+                }
+            },
+            controllerNameResolver = { fromDeviceId ->
+                com.github.damontecres.stashapp.util.realtime.DeviceBusHost.controllerName(fromDeviceId)
+            },
+        )
     }
 
     override fun getResources(): Resources = Restring.wrapResources(applicationContext, super.getResources())
@@ -201,6 +241,14 @@ class StashApplication : Application() {
     }
 
     inner class LifecycleObserverImpl : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            Log.v(TAG, "LifecycleObserverImpl.onStart")
+            // App is foreground: start the live-refresh WS (capability-gated inside the host).
+            com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.onForeground()
+            // And (re)start deviceBus presence (double-gated: capability + opt-in inside the host).
+            com.github.damontecres.stashapp.util.realtime.DeviceBusHost.onForeground()
+        }
+
         override fun onPause(owner: LifecycleOwner) {
             Log.v(TAG, "LifecycleObserverImpl.onPause")
             StashExoPlayer.releasePlayer()
@@ -209,6 +257,10 @@ class StashApplication : Application() {
         override fun onStop(owner: LifecycleOwner) {
             Log.v(TAG, "LifecycleObserverImpl.onStop")
             StashExoPlayer.releasePlayer()
+            // App is backgrounded: drop the live-refresh WS until the next foreground.
+            com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.onBackground()
+            // And stop deviceBus presence (unregisters → OFFLINE; reconnects next foreground).
+            com.github.damontecres.stashapp.util.realtime.DeviceBusHost.onBackground()
         }
 
         override fun onDestroy(owner: LifecycleOwner) {

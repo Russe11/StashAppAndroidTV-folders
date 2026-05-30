@@ -1,0 +1,37 @@
+# NG deviceBus: presence registry query + register/heartbeat/playback/command mutations.
+#
+# Gate ALL consumption on serverCapabilities.features containing "deviceBus" (see
+# ServerCapabilities) AND the opt-in presence toggle (default OFF). Everything here is ephemeral
+# on the server (in-memory, never persisted) and carries scene IDs not titles — resolve scene
+# names locally for display. Shapes copied verbatim from the server contract (design §5).
+
+# Online devices (lastSeen within TTL). Drives the online-devices list / send-to picker.
+query Devices {
+    devices {
+        ...DeviceFields
+    }
+}
+
+# Connect + heartbeat (~every 20s). Upserts this device, refreshes lastSeen, emits ONLINE on a
+# fresh/recovered device. Call on opt-in connect and on each ~20s heartbeat tick.
+mutation RegisterDevice($input: DeviceInput!) {
+    registerDevice(input: $input) {
+        ...DeviceFields
+    }
+}
+
+# Graceful exit (opt-out / app shutdown). Emits OFFLINE; returns true if the device was present.
+mutation UnregisterDevice($deviceId: ID!) {
+    unregisterDevice(deviceId: $deviceId)
+}
+
+# Report live playback (debounced ~2s by the reporting device). Emits PLAYBACK; returns false if
+# the device is not registered. sceneId is null when stopped/idle.
+mutation UpdatePlaybackState($input: PlaybackStateInput!) {
+    updatePlaybackState(input: $input)
+}
+
+# Controller→target relay. Returns true only if a live target subscriber received the command.
+mutation SendDeviceCommand($input: DeviceCommandInput!) {
+    sendDeviceCommand(input: $input)
+}

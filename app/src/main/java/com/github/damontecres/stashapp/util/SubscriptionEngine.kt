@@ -2,9 +2,20 @@ package com.github.damontecres.stashapp.util
 
 import android.util.Log
 import com.apollographql.apollo.api.Subscription
+import com.github.damontecres.stashapp.api.DeviceCommandsSubscription
+import com.github.damontecres.stashapp.api.DevicePresenceSubscription
+import com.github.damontecres.stashapp.api.EntityChangedSubscription
 import com.github.damontecres.stashapp.api.JobProgressSubscription
+import com.github.damontecres.stashapp.util.realtime.DeviceBusMapper
+import com.github.damontecres.stashapp.util.realtime.DeviceCommand
+import com.github.damontecres.stashapp.util.realtime.DevicePresenceEvent
+import com.github.damontecres.stashapp.util.realtime.EntityChange
+import com.github.damontecres.stashapp.util.realtime.EntityOperation
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -51,6 +62,104 @@ class SubscriptionEngine(
         val subscription = JobProgressSubscription()
         executeSubscription(subscription, consumer)
     }
+
+    /**
+     * Subscribe to the NG `entityChanged` live-refresh feed as a cold [Flow] of decoded,
+     * Apollo-free [EntityChange]s. The flow runs on [ioDispatcher]; it completes when the WS
+     * closes and throws a [SubscriptionException] on a transport/GraphQL error — callers
+     * ([com.github.damontecres.stashapp.util.realtime.LiveRefreshRepository]) wrap it in a
+     * reconnect loop.
+     *
+     * Gating on `serverCapabilities.features` is the caller's responsibility (the WS would
+     * simply error on a server that doesn't expose the field); this engine just runs the op.
+     *
+     * @param types optional entity-kind filter (e.g. ["Scene", "Tag"]); null/empty streams all.
+     */
+    fun entityChanges(types: List<String>? = null): Flow<EntityChange> =
+        flow {
+            val subscription = EntityChangedSubscription(types = types)
+            val name = subscription.name()
+            val id = OPERATION_ID.getAndIncrement()
+            client.subscription(subscription).toFlow().collect { response ->
+                val data = response.data
+                if (data != null) {
+                    val e = data.entityChanged
+                    emit(
+                        EntityChange(
+                            entity = e.entity,
+                            id = e.id,
+                            operation = EntityOperation.fromServer(e.operation),
+                        ),
+                    )
+                } else if (response.exception != null) {
+                    throw createException(id, name, response.exception!!) { msg, ex ->
+                        SubscriptionException(id, name, msg, ex)
+                    }
+                } else {
+                    val errorMessages = response.errors?.joinToString("\n") { it.message }.orEmpty()
+                    Log.e(TAG, "Errors in $id $name: ${response.errors}")
+                    throw SubscriptionException(id, name, "Error in $name: $errorMessages")
+                }
+            }
+            Log.v(TAG, "Completed subscription $id $name")
+        }.flowOn(ioDispatcher)
+
+    /**
+     * Subscribe to the NG `devicePresence` feed as a cold [Flow] of decoded, Apollo-free
+     * [DevicePresenceEvent]s (ONLINE/OFFLINE/PLAYBACK for every device on the bus). Completes when
+     * the WS closes and throws [SubscriptionException] on a transport/GraphQL error — callers
+     * ([com.github.damontecres.stashapp.util.realtime.DeviceBusRepository]) wrap it in a reconnect
+     * loop. Capability + opt-in gating is the caller's responsibility.
+     */
+    fun devicePresence(): Flow<DevicePresenceEvent> =
+        flow {
+            val subscription = DevicePresenceSubscription()
+            val name = subscription.name()
+            val id = OPERATION_ID.getAndIncrement()
+            client.subscription(subscription).toFlow().collect { response ->
+                val data = response.data
+                if (data != null) {
+                    emit(DeviceBusMapper.presenceEvent(data.devicePresence))
+                } else if (response.exception != null) {
+                    throw createException(id, name, response.exception!!) { msg, ex ->
+                        SubscriptionException(id, name, msg, ex)
+                    }
+                } else {
+                    val errorMessages = response.errors?.joinToString("\n") { it.message }.orEmpty()
+                    Log.e(TAG, "Errors in $id $name: ${response.errors}")
+                    throw SubscriptionException(id, name, "Error in $name: $errorMessages")
+                }
+            }
+            Log.v(TAG, "Completed subscription $id $name")
+        }.flowOn(ioDispatcher)
+
+    /**
+     * Subscribe to the NG `deviceCommands` feed for [deviceId] (this device's own id) as a cold
+     * [Flow] of decoded, Apollo-free [DeviceCommand]s. The server delivers ONLY commands whose
+     * `targetDeviceId == deviceId`. The player (R-C) consumes these. Same error/lifecycle contract
+     * as [devicePresence].
+     */
+    fun deviceCommands(deviceId: String): Flow<DeviceCommand> =
+        flow {
+            val subscription = DeviceCommandsSubscription(deviceId = deviceId)
+            val name = subscription.name()
+            val id = OPERATION_ID.getAndIncrement()
+            client.subscription(subscription).toFlow().collect { response ->
+                val data = response.data
+                if (data != null) {
+                    DeviceBusMapper.command(data.deviceCommands)?.let { emit(it) }
+                } else if (response.exception != null) {
+                    throw createException(id, name, response.exception!!) { msg, ex ->
+                        SubscriptionException(id, name, msg, ex)
+                    }
+                } else {
+                    val errorMessages = response.errors?.joinToString("\n") { it.message }.orEmpty()
+                    Log.e(TAG, "Errors in $id $name: ${response.errors}")
+                    throw SubscriptionException(id, name, "Error in $name: $errorMessages")
+                }
+            }
+            Log.v(TAG, "Completed subscription $id $name")
+        }.flowOn(ioDispatcher)
 
     companion object {
         private const val TAG = "SubscriptionEngine"

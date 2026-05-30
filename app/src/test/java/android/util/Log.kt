@@ -34,6 +34,16 @@ fun w(
     return 0
 }
 
+fun w(
+    tag: String,
+    msg: String,
+    t: Throwable,
+): Int {
+    println("WARN: $tag: $msg")
+    t.printStackTrace()
+    return 0
+}
+
 fun i(
     tag: String,
     msg: String,

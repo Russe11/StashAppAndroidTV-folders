@@ -577,6 +577,18 @@ fun PreferencesContent(
                     }
                 }
             }
+            // NG deviceBus: surface the cross-device presence panel (opt-in toggle + online-devices
+            // list) at the bottom of the BASIC screen. The panel self-gates on the `deviceBus`
+            // capability (renders a single "not supported" line otherwise), so this item is safe to
+            // add unconditionally — on a non-deviceBus server it shows the explanatory line only.
+            if (preferenceScreenOption == PreferenceScreenOption.BASIC) {
+                item {
+                    com.github.damontecres.stashapp.ui.components.devicebus.CrossDevicePanel(
+                        server = server,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+            }
         }
         if (showScreensaverFilterDialog) {
             ChooseScreensaverFilterDialog(
