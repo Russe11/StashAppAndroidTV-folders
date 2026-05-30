@@ -2,8 +2,13 @@ package com.github.damontecres.stashapp.util
 
 import android.util.Log
 import com.apollographql.apollo.api.Subscription
+import com.github.damontecres.stashapp.api.DeviceCommandsSubscription
+import com.github.damontecres.stashapp.api.DevicePresenceSubscription
 import com.github.damontecres.stashapp.api.EntityChangedSubscription
 import com.github.damontecres.stashapp.api.JobProgressSubscription
+import com.github.damontecres.stashapp.util.realtime.DeviceBusMapper
+import com.github.damontecres.stashapp.util.realtime.DeviceCommand
+import com.github.damontecres.stashapp.util.realtime.DevicePresenceEvent
 import com.github.damontecres.stashapp.util.realtime.EntityChange
 import com.github.damontecres.stashapp.util.realtime.EntityOperation
 import kotlinx.coroutines.CoroutineDispatcher
@@ -86,6 +91,63 @@ class SubscriptionEngine(
                             operation = EntityOperation.fromServer(e.operation),
                         ),
                     )
+                } else if (response.exception != null) {
+                    throw createException(id, name, response.exception!!) { msg, ex ->
+                        SubscriptionException(id, name, msg, ex)
+                    }
+                } else {
+                    val errorMessages = response.errors?.joinToString("\n") { it.message }.orEmpty()
+                    Log.e(TAG, "Errors in $id $name: ${response.errors}")
+                    throw SubscriptionException(id, name, "Error in $name: $errorMessages")
+                }
+            }
+            Log.v(TAG, "Completed subscription $id $name")
+        }.flowOn(ioDispatcher)
+
+    /**
+     * Subscribe to the NG `devicePresence` feed as a cold [Flow] of decoded, Apollo-free
+     * [DevicePresenceEvent]s (ONLINE/OFFLINE/PLAYBACK for every device on the bus). Completes when
+     * the WS closes and throws [SubscriptionException] on a transport/GraphQL error — callers
+     * ([com.github.damontecres.stashapp.util.realtime.DeviceBusRepository]) wrap it in a reconnect
+     * loop. Capability + opt-in gating is the caller's responsibility.
+     */
+    fun devicePresence(): Flow<DevicePresenceEvent> =
+        flow {
+            val subscription = DevicePresenceSubscription()
+            val name = subscription.name()
+            val id = OPERATION_ID.getAndIncrement()
+            client.subscription(subscription).toFlow().collect { response ->
+                val data = response.data
+                if (data != null) {
+                    emit(DeviceBusMapper.presenceEvent(data.devicePresence))
+                } else if (response.exception != null) {
+                    throw createException(id, name, response.exception!!) { msg, ex ->
+                        SubscriptionException(id, name, msg, ex)
+                    }
+                } else {
+                    val errorMessages = response.errors?.joinToString("\n") { it.message }.orEmpty()
+                    Log.e(TAG, "Errors in $id $name: ${response.errors}")
+                    throw SubscriptionException(id, name, "Error in $name: $errorMessages")
+                }
+            }
+            Log.v(TAG, "Completed subscription $id $name")
+        }.flowOn(ioDispatcher)
+
+    /**
+     * Subscribe to the NG `deviceCommands` feed for [deviceId] (this device's own id) as a cold
+     * [Flow] of decoded, Apollo-free [DeviceCommand]s. The server delivers ONLY commands whose
+     * `targetDeviceId == deviceId`. The player (R-C) consumes these. Same error/lifecycle contract
+     * as [devicePresence].
+     */
+    fun deviceCommands(deviceId: String): Flow<DeviceCommand> =
+        flow {
+            val subscription = DeviceCommandsSubscription(deviceId = deviceId)
+            val name = subscription.name()
+            val id = OPERATION_ID.getAndIncrement()
+            client.subscription(subscription).toFlow().collect { response ->
+                val data = response.data
+                if (data != null) {
+                    DeviceBusMapper.command(data.deviceCommands)?.let { emit(it) }
                 } else if (response.exception != null) {
                     throw createException(id, name, response.exception!!) { msg, ex ->
                         SubscriptionException(id, name, msg, ex)

@@ -33,6 +33,16 @@ data class ServerCapabilities(
      */
     val supportsEntityChanged: Boolean get() = supports(FEATURE_ENTITY_CHANGED)
 
+    /**
+     * NG cross-device presence + control: the server advertises the `deviceBus` surface
+     * (registerDevice / devicePresence / deviceCommands / sendDeviceCommand). Gates ALL
+     * deviceBus UI and presence behaviour
+     * ([com.github.damontecres.stashapp.util.realtime.DeviceBusRepository]); when absent the
+     * online-devices UI is hidden and this device never registers. ANDed with the user opt-in
+     * toggle ([com.github.damontecres.stashapp.util.realtime.DeviceBusPreferences]).
+     */
+    val supportsDeviceBus: Boolean get() = supports(FEATURE_DEVICE_BUS)
+
     companion object {
         const val EDITION_NG = "ng"
         const val EDITION_UPSTREAM = "upstream"
@@ -42,6 +52,7 @@ data class ServerCapabilities(
         const val FEATURE_FOLDER_COUNTS = "folderCounts"
         const val FEATURE_WEBHOOKS = "webhooks"
         const val FEATURE_ENTITY_CHANGED = "entityChanged"
+        const val FEATURE_DEVICE_BUS = "deviceBus"
 
         /**
          * The capabilities of a server that does not answer `serverCapabilities` (i.e. plain
