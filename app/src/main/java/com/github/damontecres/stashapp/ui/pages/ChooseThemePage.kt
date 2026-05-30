@@ -1,6 +1,7 @@
 package com.github.damontecres.stashapp.ui.pages
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -48,6 +49,7 @@ import com.github.damontecres.stashapp.navigation.NavigationListener
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.presenters.ScenePresenter
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
+import com.github.damontecres.stashapp.ui.DYNAMIC_THEME_NAME
 import com.github.damontecres.stashapp.ui.PreviewTheme
 import com.github.damontecres.stashapp.ui.cards.IconRowText
 import com.github.damontecres.stashapp.ui.cards.ImageOverlay
@@ -58,6 +60,7 @@ import com.github.damontecres.stashapp.ui.chooseColorScheme
 import com.github.damontecres.stashapp.ui.compat.Button
 import com.github.damontecres.stashapp.ui.defaultColorSchemeSet
 import com.github.damontecres.stashapp.ui.enableMarquee
+import com.github.damontecres.stashapp.ui.getTheme
 import com.github.damontecres.stashapp.ui.parseThemeJson
 import com.github.damontecres.stashapp.ui.readThemeJson
 import com.github.damontecres.stashapp.ui.uiConfigPreview
@@ -228,6 +231,33 @@ fun ChooseThemePage(
                         Text(
                             text = "Use default",
                         )
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    item {
+                        val dynamicSelected = name == DYNAMIC_THEME_NAME
+                        Button(
+                            onClick = {
+                                name = DYNAMIC_THEME_NAME
+                                colorScheme =
+                                    getTheme(
+                                        context = context,
+                                        themeStyle = uiConfig.preferences.interfacePreferences.themeStyle,
+                                        themeName = DYNAMIC_THEME_NAME,
+                                        isSystemInDarkTheme = isSystemInDark,
+                                    ).tvColorScheme
+                            },
+                            modifier =
+                                if (dynamicSelected) {
+                                    Modifier.border(2.dp, Color.LightGray)
+                                } else {
+                                    Modifier
+                                },
+                        ) {
+                            Text(
+                                text = "Dynamic (system colors)",
+                            )
+                        }
                     }
                 }
                 item {
