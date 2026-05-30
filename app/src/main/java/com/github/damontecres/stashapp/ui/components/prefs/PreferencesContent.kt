@@ -18,6 +18,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +54,7 @@ import com.github.damontecres.stashapp.RootActivity
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.screensaver.ChooseScreensaverFilterDialog
 import com.github.damontecres.stashapp.ui.tryRequestFocus
 import com.github.damontecres.stashapp.ui.util.ifElse
@@ -296,6 +303,27 @@ fun PreferencesContent(
             PreferenceScreenOption.ADVANCED -> "Advanced Preferences"
             PreferenceScreenOption.USER_INTERFACE -> "User Interface Preferences"
         }
+
+    // Search/filter — touch only; skip on TV to avoid disrupting D-pad focus traversal.
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    // Pre-resolve preference titles at composition time so we can filter case-insensitively.
+    // Each entry is (groupIndex in prefList, resolved group title, list of filtered prefs).
+    val resolvedGroups: List<SettingsFilteredGroup> =
+        prefList.mapIndexed { idx, group ->
+            val groupTitleStr = stringResource(group.title)
+            val prefs =
+                if (searchQuery.isBlank()) {
+                    group.preferences
+                } else {
+                    val q = searchQuery.trim()
+                    group.preferences.filter { pref ->
+                        stringResource(pref.title).contains(q, ignoreCase = true)
+                    }
+                }
+            SettingsFilteredGroup(idx, groupTitleStr, prefs)
+        }.filter { it.preferences.isNotEmpty() }
+
     LaunchedEffect(Unit) {
         onUpdateTitle?.invoke(AnnotatedString(screenTitle))
         if (preferenceScreenOption == PreferenceScreenOption.ADVANCED) {
@@ -316,6 +344,9 @@ fun PreferencesContent(
     }
 
     var showScreensaverFilterDialog by remember { mutableStateOf(false) }
+
+    // Capture at composable scope so the value is available in non-composable LazyListScope lambdas.
+    val showSearchField = isNotTvDevice
 
     AnimatedVisibility(
         visible = visible,
@@ -347,246 +378,296 @@ fun PreferencesContent(
                     )
                 }
             }
-            prefList.forEachIndexed { groupIndex, group ->
+            // Search/filter field — touch devices only to avoid complicating D-pad focus order.
+            if (showSearchField) {
                 item {
-                    Text(
-                        text = stringResource(group.title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.border,
-                        textAlign = TextAlign.Start,
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            androidx.compose.material3.Text("Filter settings")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear filter",
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp, bottom = 4.dp),
+                                .padding(bottom = 8.dp),
                     )
                 }
-                if (updateAvailable &&
-                    groupIndex == 0 &&
-                    preferenceScreenOption == PreferenceScreenOption.BASIC
-                ) {
+            }
+            if (resolvedGroups.isEmpty() && searchQuery.isNotBlank()) {
+                item {
+                    Text(
+                        text = "No settings match",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                    )
+                }
+            } else {
+                resolvedGroups.forEach { filteredGroup ->
+                    val groupIndex = filteredGroup.originalIndex
                     item {
-                        val updateFocusRequester = remember { FocusRequester() }
-                        LaunchedEffect(Unit) {
-                            if (focusedIndex.first == 0 && focusedIndex.second == 0) {
-                                // Only re-focus if the user hasn't moved
-                                updateFocusRequester.tryRequestFocus()
-                            }
-                        }
-                        ClickPreference(
-                            title = stringResource(R.string.install_update),
-                            onClick = {
-                                if (movementSounds) playOnClickSound(context)
-                                updateVersion?.let {
-                                    navigationManager.navigate(Destination.UpdateApp(it))
-                                }
-                            },
-                            summary = updateVersion?.version?.toString(),
+                        Text(
+                            text = filteredGroup.groupTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.border,
+                            textAlign = TextAlign.Start,
                             modifier =
                                 Modifier
-                                    .focusRequester(updateFocusRequester)
-                                    .playSoundOnFocus(movementSounds),
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 4.dp),
                         )
                     }
-                }
-                group.preferences.forEachIndexed { prefIndex, pref ->
-                    pref as StashPreference<Any>
-                    item {
-                        val interactionSource = remember { MutableInteractionSource() }
-                        val focused = interactionSource.collectIsFocusedAsState().value
-                        LaunchedEffect(focused) {
-                            if (focused) {
-                                focusedIndex = Pair(groupIndex, prefIndex)
-                                if (movementSounds) playOnClickSound(context)
+                    if (updateAvailable &&
+                        groupIndex == 0 &&
+                        preferenceScreenOption == PreferenceScreenOption.BASIC
+                    ) {
+                        item {
+                            val updateFocusRequester = remember { FocusRequester() }
+                            LaunchedEffect(Unit) {
+                                if (focusedIndex.first == 0 && focusedIndex.second == 0) {
+                                    // Only re-focus if the user hasn't moved
+                                    updateFocusRequester.tryRequestFocus()
+                                }
                             }
+                            ClickPreference(
+                                title = stringResource(R.string.install_update),
+                                onClick = {
+                                    if (movementSounds) playOnClickSound(context)
+                                    updateVersion?.let {
+                                        navigationManager.navigate(Destination.UpdateApp(it))
+                                    }
+                                },
+                                summary = updateVersion?.version?.toString(),
+                                modifier =
+                                    Modifier
+                                        .focusRequester(updateFocusRequester)
+                                        .playSoundOnFocus(movementSounds),
+                            )
                         }
-                        when (pref) {
-                            StashPreference.InstalledVersion -> {
-                                var clickCount by remember { mutableIntStateOf(0) }
-                                ClickPreference(
-                                    title = stringResource(R.string.stashapp_package_manager_installed_version),
-                                    onClick = {
-                                        if (movementSounds) playOnClickSound(context)
-                                        if (clickCount++ >= 2) {
-                                            clickCount = 0
-                                            navigationManager.navigate(Destination.Debug)
-                                        }
-                                    },
-                                    summary = installedVersion.toString(),
-                                    interactionSource = interactionSource,
-                                    modifier =
-                                        Modifier
-                                            .ifElse(
-                                                groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
-                                                Modifier.focusRequester(focusRequester),
-                                            ),
-                                )
+                    }
+                    filteredGroup.preferences.forEachIndexed { prefIndex, pref ->
+                        pref as StashPreference<Any>
+                        item {
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val focused = interactionSource.collectIsFocusedAsState().value
+                            LaunchedEffect(focused) {
+                                if (focused) {
+                                    focusedIndex = Pair(groupIndex, prefIndex)
+                                    if (movementSounds) playOnClickSound(context)
+                                }
                             }
-
-                            StashPreference.Update -> {
-                                ClickPreference(
-                                    title =
-                                        if (updateVersion != null && updateAvailable) {
-                                            stringResource(R.string.install_update)
-                                        } else if (!preferences.updatePreferences.checkForUpdates && updateVersion == null) {
-                                            stringResource(R.string.stashapp_package_manager_check_for_updates)
-                                        } else {
-                                            stringResource(R.string.no_update_available)
+                            when (pref) {
+                                StashPreference.InstalledVersion -> {
+                                    var clickCount by remember { mutableIntStateOf(0) }
+                                    ClickPreference(
+                                        title = stringResource(R.string.stashapp_package_manager_installed_version),
+                                        onClick = {
+                                            if (movementSounds) playOnClickSound(context)
+                                            if (clickCount++ >= 2) {
+                                                clickCount = 0
+                                                navigationManager.navigate(Destination.Debug)
+                                            }
                                         },
-                                    onClick = {
-                                        if (movementSounds) playOnClickSound(context)
-                                        if (updateVersion != null && updateAvailable) {
+                                        summary = installedVersion.toString(),
+                                        interactionSource = interactionSource,
+                                        modifier =
+                                            Modifier
+                                                .ifElse(
+                                                    groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
+                                                    Modifier.focusRequester(focusRequester),
+                                                ),
+                                    )
+                                }
+
+                                StashPreference.Update -> {
+                                    ClickPreference(
+                                        title =
+                                            if (updateVersion != null && updateAvailable) {
+                                                stringResource(R.string.install_update)
+                                            } else if (!preferences.updatePreferences.checkForUpdates && updateVersion == null) {
+                                                stringResource(R.string.stashapp_package_manager_check_for_updates)
+                                            } else {
+                                                stringResource(R.string.no_update_available)
+                                            },
+                                        onClick = {
+                                            if (movementSounds) playOnClickSound(context)
+                                            if (updateVersion != null && updateAvailable) {
+                                                updateVersion?.let {
+                                                    navigationManager.navigate(
+                                                        Destination.UpdateApp(it),
+                                                    )
+                                                }
+                                            } else {
+                                                scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                                                    updateVersion =
+                                                        UpdateChecker.getLatestRelease(
+                                                            context,
+                                                            preferences.updatePreferences.updateUrl,
+                                                        )
+                                                }
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (movementSounds) playOnClickSound(context)
                                             updateVersion?.let {
                                                 navigationManager.navigate(
                                                     Destination.UpdateApp(it),
                                                 )
                                             }
-                                        } else {
-                                            scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
-                                                updateVersion =
-                                                    UpdateChecker.getLatestRelease(
-                                                        context,
-                                                        preferences.updatePreferences.updateUrl,
-                                                    )
-                                            }
-                                        }
-                                    },
-                                    onLongClick = {
-                                        if (movementSounds) playOnClickSound(context)
-                                        updateVersion?.let {
-                                            navigationManager.navigate(
-                                                Destination.UpdateApp(it),
-                                            )
-                                        }
-                                    },
-                                    summary =
-                                        if (updateAvailable) {
-                                            updateVersion?.version?.toString()
-                                        } else {
-                                            null
                                         },
-                                    interactionSource = interactionSource,
-                                    modifier =
-                                        Modifier
-                                            .ifElse(
-                                                groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
-                                                Modifier.focusRequester(focusRequester),
-                                            ),
-                                )
-                            }
+                                        summary =
+                                            if (updateAvailable) {
+                                                updateVersion?.version?.toString()
+                                            } else {
+                                                null
+                                            },
+                                        interactionSource = interactionSource,
+                                        modifier =
+                                            Modifier
+                                                .ifElse(
+                                                    groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
+                                                    Modifier.focusRequester(focusRequester),
+                                                ),
+                                    )
+                                }
 
-                            StashPreference.ScreensaverFilter -> {
-                                ClickPreference(
-                                    title = stringResource(pref.title),
-                                    onClick = {
-                                        showScreensaverFilterDialog = true
-                                    },
-                                    interactionSource = interactionSource,
-                                    modifier =
-                                        Modifier
-                                            .ifElse(
-                                                groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
-                                                Modifier.focusRequester(focusRequester),
-                                            ),
-                                )
-                            }
+                                StashPreference.ScreensaverFilter -> {
+                                    ClickPreference(
+                                        title = stringResource(pref.title),
+                                        onClick = {
+                                            showScreensaverFilterDialog = true
+                                        },
+                                        interactionSource = interactionSource,
+                                        modifier =
+                                            Modifier
+                                                .ifElse(
+                                                    groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
+                                                    Modifier.focusRequester(focusRequester),
+                                                ),
+                                    )
+                                }
 
-                            else -> {
-                                val value = pref.getter.invoke(preferences)
-                                ComposablePreference(
-                                    server = server,
-                                    navigationManager = navigationManager,
-                                    preference = pref,
-                                    value = value,
-                                    onValueChange = { newValue ->
-                                        val validation = pref.validate(newValue)
-                                        when (validation) {
-                                            is PreferenceValidation.Invalid -> {
-                                                // TODO?
-                                                Toast
-                                                    .makeText(
-                                                        context,
-                                                        validation.message,
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                            }
+                                else -> {
+                                    val value = pref.getter.invoke(preferences)
+                                    ComposablePreference(
+                                        server = server,
+                                        navigationManager = navigationManager,
+                                        preference = pref,
+                                        value = value,
+                                        onValueChange = { newValue ->
+                                            val validation = pref.validate(newValue)
+                                            when (validation) {
+                                                is PreferenceValidation.Invalid -> {
+                                                    // TODO?
+                                                    Toast
+                                                        .makeText(
+                                                            context,
+                                                            validation.message,
+                                                            Toast.LENGTH_SHORT,
+                                                        ).show()
+                                                }
 
-                                            PreferenceValidation.Valid -> {
-                                                scope.launch(StashCoroutineExceptionHandler()) {
-                                                    preferences =
-                                                        context.preferences.updateData { prefs ->
-                                                            pref.setter(prefs, newValue)
+                                                PreferenceValidation.Valid -> {
+                                                    scope.launch(StashCoroutineExceptionHandler()) {
+                                                        preferences =
+                                                            context.preferences.updateData { prefs ->
+                                                                pref.setter(prefs, newValue)
+                                                            }
+                                                        sharedPrefs.edit {
+                                                            pref.prefSetter(context, this, newValue)
+                                                            if (pref == StashPreference.ReadOnlyMode) {
+                                                                // Legacy read only mode has two preferences
+                                                                // New mode just saves the PIN, but need to explicitly enable/disable too for legacy
+                                                                putBoolean(
+                                                                    context.getString(R.string.pref_key_read_only_mode),
+                                                                    newValue
+                                                                        .toString()
+                                                                        .isNotNullOrBlank(),
+                                                                )
+                                                            }
                                                         }
-                                                    sharedPrefs.edit {
-                                                        pref.prefSetter(context, this, newValue)
-                                                        if (pref == StashPreference.ReadOnlyMode) {
-                                                            // Legacy read only mode has two preferences
-                                                            // New mode just saves the PIN, but need to explicitly enable/disable too for legacy
-                                                            putBoolean(
-                                                                context.getString(R.string.pref_key_read_only_mode),
-                                                                newValue
-                                                                    .toString()
-                                                                    .isNotNullOrBlank(),
+                                                        if (pref == StashPreference.UseNewUI && newValue is Boolean && !newValue) {
+                                                            context.startActivity(
+                                                                Intent(
+                                                                    context,
+                                                                    RootActivity::class.java,
+                                                                ).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
                                                             )
                                                         }
                                                     }
-                                                    if (pref == StashPreference.UseNewUI && newValue is Boolean && !newValue) {
-                                                        context.startActivity(
-                                                            Intent(
-                                                                context,
-                                                                RootActivity::class.java,
-                                                            ).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-                                                        )
-                                                    }
                                                 }
                                             }
-                                        }
-                                    },
-                                    onCacheClear = { viewModel.updateCacheUsage(context) },
-                                    cacheUsage = cacheUsage,
-                                    interactionSource = interactionSource,
+                                        },
+                                        onCacheClear = { viewModel.updateCacheUsage(context) },
+                                        cacheUsage = cacheUsage,
+                                        interactionSource = interactionSource,
+                                        modifier =
+                                            Modifier
+                                                .ifElse(
+                                                    groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
+                                                    Modifier.focusRequester(focusRequester),
+                                                ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    val group = prefList[groupIndex]
+                    if (preferenceScreenOption == PreferenceScreenOption.ADVANCED && group.title == R.string.stashapp_config_tasks_job_queue) {
+                        if (jobQueue.isEmpty()) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.stashapp_config_tasks_empty_queue),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     modifier =
                                         Modifier
-                                            .ifElse(
-                                                groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
-                                                Modifier.focusRequester(focusRequester),
-                                            ),
+                                            .padding(horizontal = 8.dp, vertical = 16.dp),
                                 )
                             }
-                        }
-                    }
-                }
-                if (preferenceScreenOption == PreferenceScreenOption.ADVANCED && group.title == R.string.stashapp_config_tasks_job_queue) {
-                    if (jobQueue.isEmpty()) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.stashapp_config_tasks_empty_queue),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier =
-                                    Modifier
-                                        .padding(horizontal = 8.dp, vertical = 16.dp),
-                            )
-                        }
-                    } else {
-                        item {
-                            Spacer(Modifier.height(8.dp))
-                            jobQueue.forEach {
-                                JobDisplay(it, Modifier.padding(horizontal = 8.dp))
+                        } else {
+                            item {
+                                Spacer(Modifier.height(8.dp))
+                                jobQueue.forEach {
+                                    JobDisplay(it, Modifier.padding(horizontal = 8.dp))
+                                }
                             }
                         }
                     }
                 }
-            }
-            // NG deviceBus: surface the cross-device presence panel (opt-in toggle + online-devices
-            // list) at the bottom of the BASIC screen. The panel self-gates on the `deviceBus`
-            // capability (renders a single "not supported" line otherwise), so this item is safe to
-            // add unconditionally — on a non-deviceBus server it shows the explanatory line only.
-            if (preferenceScreenOption == PreferenceScreenOption.BASIC) {
-                item {
-                    com.github.damontecres.stashapp.ui.components.devicebus.CrossDevicePanel(
-                        server = server,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
+                // NG deviceBus: surface the cross-device presence panel (opt-in toggle + online-devices
+                // list) at the bottom of the BASIC screen. The panel self-gates on the `deviceBus`
+                // capability (renders a single "not supported" line otherwise), so this item is safe to
+                // add unconditionally — on a non-deviceBus server it shows the explanatory line only.
+                if (preferenceScreenOption == PreferenceScreenOption.BASIC) {
+                    item {
+                        com.github.damontecres.stashapp.ui.components.devicebus.CrossDevicePanel(
+                            server = server,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
                 }
             }
         }
@@ -605,3 +686,13 @@ fun getPinPreferenceKey(pref: StashPreference<*>) =
         StashPreference.ReadOnlyMode -> R.string.pref_key_read_only_mode_pin
         else -> throw IllegalStateException("Unknown preference type: $pref")
     }
+
+/**
+ * A preference group with pre-resolved title string and filtered preference list,
+ * used by the settings search/filter feature.
+ */
+private data class SettingsFilteredGroup(
+    val originalIndex: Int,
+    val groupTitle: String,
+    val preferences: List<StashPreference<out Any?>>,
+)

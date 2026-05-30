@@ -9,9 +9,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +60,7 @@ import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.Material3AppTheme
 import com.github.damontecres.stashapp.ui.cards.StashCard
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.ItemsRow
 import com.github.damontecres.stashapp.ui.components.SearchEditTextBox
 import com.github.damontecres.stashapp.util.CreateNew
@@ -161,6 +169,7 @@ fun SearchForPage(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val queryEngine = QueryEngine(server)
+    val touch = isNotTvDevice
 
     val searchDelay = uiConfig.preferences.searchPreferences.searchDelayMs
     val perPage = uiConfig.preferences.searchPreferences.maxResults
@@ -344,14 +353,29 @@ fun SearchForPage(
             }
         }
         item {
-            SearchEditTextBox(
-                value = searchQuery,
-                onValueChange = { newQuery ->
-                    searchQuery = newQuery
-                    search(newQuery)
-                },
-                onSearchClick = { search(searchQuery) },
-            )
+            if (touch) {
+                SearchForFieldBar(
+                    query = searchQuery,
+                    onQueryChange = { newQuery ->
+                        searchQuery = newQuery
+                        search(newQuery)
+                    },
+                    onSearch = { search(searchQuery) },
+                    onClear = {
+                        searchQuery = ""
+                        search("")
+                    },
+                )
+            } else {
+                SearchEditTextBox(
+                    value = searchQuery,
+                    onValueChange = { newQuery ->
+                        searchQuery = newQuery
+                        search(newQuery)
+                    },
+                    onSearchClick = { search(searchQuery) },
+                )
+            }
         }
 
         val startPadding = 8.dp
@@ -494,4 +518,57 @@ suspend fun handleCreate(
     } else {
         return null
     }
+}
+
+/**
+ * Touch-only Material 3 [SearchBar] for [SearchForPage]. It is rendered in its collapsed
+ * (non-expanding) form because results, suggestions, and recent items are shown in the surrounding
+ * [LazyColumn] rather than inside the search bar's expansion overlay. Query/debounce behavior is
+ * preserved via the supplied callbacks.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchForFieldBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SearchBar(
+        modifier = modifier.fillMaxWidth(),
+        inputField = {
+            SearchBarDefaults.InputField(
+                query = query,
+                onQueryChange = onQueryChange,
+                onSearch = onSearch,
+                expanded = false,
+                onExpandedChange = {},
+                placeholder = {
+                    androidx.compose.material3.Text(
+                        text = stringResource(R.string.stashapp_actions_search),
+                    )
+                },
+                leadingIcon = {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = stringResource(R.string.stashapp_actions_search),
+                    )
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        androidx.compose.material3.IconButton(onClick = onClear) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.stashapp_actions_clear),
+                            )
+                        }
+                    }
+                },
+            )
+        },
+        expanded = false,
+        onExpandedChange = {},
+        content = {},
+    )
 }
