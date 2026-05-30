@@ -62,6 +62,10 @@ class TrackActivityPlaybackListener(
                                 totalPlayDurationMilliseconds.addAndGet(current)
                                 saveSceneActivity(-1L, current)
                             }
+                            // NG deviceBus: report live playback so other devices see this TV's
+                            // "now playing". No-op + internally debounced when presence isn't active
+                            // (opt-out / non-deviceBus server); IDs not titles on the wire.
+                            reportPlaybackToDeviceBus(paused = false)
                         }
                         timestamp = now
                     } catch (ex: Exception) {
@@ -95,6 +99,28 @@ class TrackActivityPlaybackListener(
                 totalPlayDurationMilliseconds.addAndGet(diff)
                 saveSceneActivity(-1, diff)
             }
+        }
+        // NG deviceBus: a play/pause flip is a meaningful change — report it (the host debounces,
+        // but a pause-flip reports immediately so a remote view updates promptly).
+        reportPlaybackToDeviceBus(paused = !isPlaying)
+    }
+
+    /**
+     * Push this device's live playback state to the NG deviceBus presence layer. No-op when
+     * presence isn't active (not opted-in / not a deviceBus server); the host throttles to ~2s and
+     * fires immediately on meaningful changes. Privacy: only the scene *id* + numeric position go
+     * on the wire — never a title.
+     */
+    private fun reportPlaybackToDeviceBus(paused: Boolean) {
+        try {
+            com.github.damontecres.stashapp.util.realtime.DeviceBusHost.reportPlayback(
+                sceneId = scene.id,
+                positionSeconds = getCurrentPosition().toSeconds,
+                paused = paused,
+            )
+        } catch (ex: Exception) {
+            // Presence is best-effort; never let it disturb playback/activity tracking.
+            Log.v(TAG, "deviceBus reportPlayback skipped: ${ex.message}")
         }
     }
 

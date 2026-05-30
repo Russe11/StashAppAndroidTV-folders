@@ -237,6 +237,9 @@ data class StashServer(
             // Restart NG live-refresh against the new server (no-op if not foreground / not
             // capability-advertised).
             com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.currentServerChanged(server)
+            // Restart NG deviceBus presence against the new server (no-op if not foreground /
+            // not capability-advertised / not opted-in).
+            com.github.damontecres.stashapp.util.realtime.DeviceBusHost.currentServerChanged(server)
         }
 
         fun removeStashServer(

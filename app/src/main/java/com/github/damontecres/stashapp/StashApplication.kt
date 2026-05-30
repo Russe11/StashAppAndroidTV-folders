@@ -174,6 +174,11 @@ class StashApplication : Application() {
         com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.install(
             daoProvider = { database.folderDao() },
         )
+        // NG deviceBus presence: install the host so it can register this device + report presence
+        // while foreground. Double-gated (capability `deviceBus` AND the opt-in toggle, default
+        // OFF) inside the repository — until the user opts in this device never registers and is
+        // invisible to others.
+        com.github.damontecres.stashapp.util.realtime.DeviceBusHost.install(this)
     }
 
     override fun getResources(): Resources = Restring.wrapResources(applicationContext, super.getResources())
@@ -211,6 +216,8 @@ class StashApplication : Application() {
             Log.v(TAG, "LifecycleObserverImpl.onStart")
             // App is foreground: start the live-refresh WS (capability-gated inside the host).
             com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.onForeground()
+            // And (re)start deviceBus presence (double-gated: capability + opt-in inside the host).
+            com.github.damontecres.stashapp.util.realtime.DeviceBusHost.onForeground()
         }
 
         override fun onPause(owner: LifecycleOwner) {
@@ -223,6 +230,8 @@ class StashApplication : Application() {
             StashExoPlayer.releasePlayer()
             // App is backgrounded: drop the live-refresh WS until the next foreground.
             com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.onBackground()
+            // And stop deviceBus presence (unregisters → OFFLINE; reconnects next foreground).
+            com.github.damontecres.stashapp.util.realtime.DeviceBusHost.onBackground()
         }
 
         override fun onDestroy(owner: LifecycleOwner) {
