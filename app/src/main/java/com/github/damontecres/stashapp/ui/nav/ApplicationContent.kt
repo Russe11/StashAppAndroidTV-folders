@@ -4,10 +4,12 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -15,7 +17,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.DialogProperties
 import com.github.damontecres.stashapp.PreferenceScreenOption
 import com.github.damontecres.stashapp.api.fragment.ImageData
+import com.github.damontecres.stashapp.api.fragment.SlimSceneData
 import com.github.damontecres.stashapp.api.fragment.StashData
+import com.github.damontecres.stashapp.api.fragment.TagData
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.FilterAndPosition
@@ -23,16 +27,23 @@ import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
 import com.github.damontecres.stashapp.proto.StashPreferences
 import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
+import com.github.damontecres.stashapp.ui.LocalSceneCurationOverrides
 import com.github.damontecres.stashapp.ui.NavDrawerFragment.Companion.TAG
 import com.github.damontecres.stashapp.ui.compat.isTvDevice
 import com.github.damontecres.stashapp.ui.components.DefaultLongClicker
 import com.github.damontecres.stashapp.ui.components.DialogPopup
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.MarkerDurationDialog
+import com.github.damontecres.stashapp.ui.components.SceneQuickActionHandlers
 import com.github.damontecres.stashapp.ui.pages.DialogParams
+import com.github.damontecres.stashapp.ui.pages.SearchForDialog
+import com.github.damontecres.stashapp.util.MutationEngine
+import com.github.damontecres.stashapp.util.SceneCurationOverrides
+import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import dev.olshevski.navigation.reimagined.NavController
 import dev.olshevski.navigation.reimagined.NavHost
+import kotlinx.coroutines.launch
 
 /**
  * Shows the actual compose content of the application
@@ -104,6 +115,65 @@ fun ApplicationContent(
 
     var dialogParams by remember { mutableStateOf<DialogParams?>(null) }
     var showMarkerDialog by remember { mutableStateOf<FilterAndPosition?>(null) }
+
+    // Optimistic, in-memory curation overrides applied from scene-card quick actions.
+    // Cards read these through LocalSceneCurationOverrides so an edit shows immediately
+    // even though the paged list source still holds the pre-edit value. The handlers
+    // object captures the MutableState directly (not the `by`-delegated local) so the
+    // remembered instance always reads/writes the live value.
+    val curationOverridesState = remember(server) { mutableStateOf(SceneCurationOverrides()) }
+    val curationOverrides = curationOverridesState.value
+    var addTagToScene by remember { mutableStateOf<SlimSceneData?>(null) }
+    val curationScope = rememberCoroutineScope()
+    val mutationEngine = remember(server) { MutationEngine(server) }
+
+    val quickActionHandlers =
+        remember(server) {
+            object : SceneQuickActionHandlers {
+                override fun currentOrganized(scene: SlimSceneData): Boolean =
+                    curationOverridesState.value.effectiveOrganized(scene.id, scene.organized)
+
+                override fun currentRating100(scene: SlimSceneData): Int? =
+                    curationOverridesState.value.effectiveRating100(scene.id, scene.rating100)
+
+                override fun onToggleOrganized(
+                    scene: SlimSceneData,
+                    newValue: Boolean,
+                ) {
+                    // Optimistic first, then write back; on failure the toast-handler
+                    // surfaces the error and the next list refresh corrects the display.
+                    curationOverridesState.value =
+                        curationOverridesState.value.withOrganized(scene.id, newValue)
+                    curationScope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                        mutationEngine.setOrganizedOnScene(scene.id, newValue)
+                    }
+                }
+
+                override fun onSetRating(
+                    scene: SlimSceneData,
+                    rating100: Int,
+                ) {
+                    curationOverridesState.value =
+                        curationOverridesState.value.withRating100(scene.id, rating100)
+                    curationScope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                        mutationEngine.setRating(scene.id, rating100)
+                    }
+                }
+
+                override fun onIncrementOCounter(scene: SlimSceneData) {
+                    curationScope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                        val result = mutationEngine.incrementOCounter(scene.id)
+                        curationOverridesState.value =
+                            curationOverridesState.value.withOCounter(scene.id, result.count)
+                    }
+                }
+
+                override fun onAddTag(scene: SlimSceneData) {
+                    addTagToScene = scene
+                }
+            }
+        }
+
     val longClicker =
         remember {
             DefaultLongClicker(
@@ -111,6 +181,8 @@ fun ApplicationContent(
                 itemOnClick,
                 server.serverPreferences.alwaysStartFromBeginning,
                 markerPlayAllOnClick = { showMarkerDialog = it },
+                quickActionHandlers =
+                    if (composeUiConfig.readOnlyModeDisabled) quickActionHandlers else null,
             ) { dialogParams = it }
         }
 
@@ -137,10 +209,11 @@ fun ApplicationContent(
 //        transitionSpec = DestinationTransitionSpec(),
 //        modifier = modifier,
 //    ) { destination ->
-    NavHost(
-        controller = navController,
-        modifier = modifier,
-    ) { destination ->
+    CompositionLocalProvider(LocalSceneCurationOverrides provides curationOverrides) {
+        NavHost(
+            controller = navController,
+            modifier = modifier,
+        ) { destination ->
         LaunchedEffect(Unit) {
             // Refresh server preferences on each page change
             navigationManager.serverViewModel.updateServerPreferences()
@@ -324,6 +397,29 @@ fun ApplicationContent(
                 },
             )
         }
+        // Quick "add tag" from a scene card: reuse the searchable + recent/suggested
+        // tag picker, then write back via setTagsOnScene (existing tags + the new one).
+        addTagToScene?.let { scene ->
+            SearchForDialog(
+                show = true,
+                dataType = DataType.TAG,
+                onItemClick = { item ->
+                    addTagToScene = null
+                    if (item is TagData) {
+                        val existing = scene.tags.map { it.slimTagData.id }
+                        if (item.id !in existing) {
+                            curationScope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                                mutationEngine.setTagsOnScene(scene.id, existing + item.id)
+                            }
+                        }
+                    }
+                },
+                onDismissRequest = { addTagToScene = null },
+                uiConfig = composeUiConfig,
+                dismissOnClick = true,
+            )
+        }
+    }
     }
 }
 

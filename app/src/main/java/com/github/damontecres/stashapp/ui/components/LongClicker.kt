@@ -3,9 +3,13 @@ package com.github.damontecres.stashapp.ui.components
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.Color
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.fragment.MarkerData
@@ -19,9 +23,14 @@ import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.playback.PlaybackMode
 import com.github.damontecres.stashapp.ui.pages.DialogParams
 import com.github.damontecres.stashapp.ui.pages.MAX_PLAYLIST_SIZE
+import com.github.damontecres.stashapp.util.SceneQuickActions
 import com.github.damontecres.stashapp.util.resume_position
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
+
+// Quick-action highlight tints for the currently-applied organized/rating state.
+private val OrganizedTint = Color(0xFF66BB6A)
+private val StarTint = Color(0xFFFFC700)
 
 fun interface LongClicker<T> {
     fun longClick(
@@ -30,11 +39,39 @@ fun interface LongClicker<T> {
     )
 }
 
+/**
+ * Callbacks for the scene-card quick-curation actions. Each call reuses the existing
+ * [com.github.damontecres.stashapp.util.MutationEngine] writeback (organized / rating
+ * / o-counter / tags) and is expected to apply an optimistic UI update. The current
+ * effective values (after optimistic overrides) are passed in so the menu can render
+ * the right toggle state and pre-select the current rating.
+ */
+interface SceneQuickActionHandlers {
+    fun currentOrganized(scene: SlimSceneData): Boolean = scene.organized
+
+    fun currentRating100(scene: SlimSceneData): Int? = scene.rating100
+
+    fun onToggleOrganized(
+        scene: SlimSceneData,
+        newValue: Boolean,
+    )
+
+    fun onSetRating(
+        scene: SlimSceneData,
+        rating100: Int,
+    )
+
+    fun onIncrementOCounter(scene: SlimSceneData)
+
+    fun onAddTag(scene: SlimSceneData)
+}
+
 class DefaultLongClicker(
     private val nav: NavigationManager,
     private val itemOnClick: ItemOnClicker<Any>,
     private val alwaysStartFromBeginning: Boolean,
     private val markerPlayAllOnClick: (FilterAndPosition) -> Unit,
+    private val quickActionHandlers: SceneQuickActionHandlers? = null,
     private val onLongClick: (DialogParams) -> Unit,
 ) : LongClicker<Any> {
     override fun longClick(
@@ -153,6 +190,60 @@ class DefaultLongClicker(
                                 )
                             }
                         },
+                    )
+                }
+                // Quick-curation actions: curate a scene without opening full detail
+                // (a real win on a remote). Reuses MutationEngine via the handlers.
+                val handlers = quickActionHandlers
+                if (item is SlimSceneData && handlers != null) {
+                    val organized = handlers.currentOrganized(item)
+                    add(
+                        DialogItem(
+                            text =
+                                if (organized) {
+                                    context.getString(R.string.quick_action_mark_unorganized)
+                                } else {
+                                    context.getString(R.string.quick_action_mark_organized)
+                                },
+                            icon = Icons.Filled.CheckCircle,
+                            // Tint the check green when already organized, neutral otherwise.
+                            iconTintColor = if (organized) OrganizedTint else null,
+                            onClick = { handlers.onToggleOrganized(item, !organized) },
+                        ),
+                    )
+                    val currentRating = handlers.currentRating100(item)
+                    SceneQuickActions.QUICK_RATING_LADDER.forEach { ladderValue ->
+                        val stars = SceneQuickActions.rating100ToStars(ladderValue)
+                        val selected = SceneQuickActions.isRatingSelected(ladderValue, currentRating)
+                        val label =
+                            if (ladderValue == 0) {
+                                context.getString(R.string.quick_action_clear_rating)
+                            } else {
+                                context.getString(R.string.quick_action_set_rating_stars, stars)
+                            }
+                        add(
+                            DialogItem(
+                                text = label,
+                                icon = Icons.Filled.Star,
+                                // The currently-applied rating is highlighted gold.
+                                iconTintColor = if (selected) StarTint else null,
+                                onClick = { handlers.onSetRating(item, ladderValue) },
+                            ),
+                        )
+                    }
+                    add(
+                        DialogItem(
+                            text = context.getString(R.string.quick_action_increment_o_counter),
+                            iconStringRes = R.string.fa_thumbs_up,
+                            onClick = { handlers.onIncrementOCounter(item) },
+                        ),
+                    )
+                    add(
+                        DialogItem(
+                            text = context.getString(R.string.quick_action_add_tag),
+                            icon = Icons.Filled.Add,
+                            onClick = { handlers.onAddTag(item) },
+                        ),
                     )
                 }
             }

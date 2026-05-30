@@ -9,17 +9,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -29,6 +33,7 @@ import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.navigation.FilterAndPosition
 import com.github.damontecres.stashapp.presenters.ScenePresenter
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
+import com.github.damontecres.stashapp.ui.LocalSceneCurationOverrides
 import com.github.damontecres.stashapp.ui.components.LongClicker
 import com.github.damontecres.stashapp.ui.enableMarquee
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
@@ -60,6 +65,13 @@ fun SceneCard(
                 }
             }
         }
+
+    // Reflect optimistic quick-action edits (organized / rating / o-counter) applied from
+    // the long-press menu before the paged source refetches. Falls back to server values.
+    val overrides = LocalSceneCurationOverrides.current
+    val effectiveRating100 = item?.let { overrides.effectiveRating100(it.id, it.rating100) }
+    val effectiveOCounter = item?.let { overrides.effectiveOCounter(it.id, it.o_counter) }
+    val effectiveOrganized = item?.let { overrides.effectiveOrganized(it.id, it.organized) } ?: false
 
     RootCard(
         item = item,
@@ -97,14 +109,27 @@ fun SceneCard(
             IconRowText(
                 sfwMode = uiConfig.sfwMode,
                 dataTypeMap,
-                item?.o_counter ?: -1,
+                effectiveOCounter ?: -1,
                 Modifier
                     .enableMarquee(it)
                     .align(Alignment.Center),
             )
         },
         imageOverlay = {
-            ImageOverlay(uiConfig.ratingAsStars, rating100 = item?.rating100) {
+            ImageOverlay(uiConfig.ratingAsStars, rating100 = effectiveRating100) {
+                if (effectiveOrganized) {
+                    // Drawn at the right edge, vertically centered: avoids the rating (TopStart),
+                    // studio badge (TopEnd), duration/resolution/progress (bottom row).
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = stringResource(R.string.stashapp_organized),
+                        tint = colorResource(android.R.color.holo_green_light),
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(8.dp),
+                    )
+                }
                 val videoFile = item?.files?.firstOrNull()?.videoFile
                 if (videoFile != null) {
                     val duration = durationToString(videoFile.duration)

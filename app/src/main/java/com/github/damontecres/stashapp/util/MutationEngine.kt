@@ -367,6 +367,22 @@ class MutationEngine(
         return executeMutation(mutation).data?.sceneUpdate
     }
 
+    suspend fun setOrganizedOnScene(
+        sceneId: String,
+        organized: Boolean,
+    ): SceneUpdateMutation.SceneUpdate? {
+        Log.v(TAG, "setOrganizedOnScene sceneId=$sceneId, organized=$organized")
+        val mutation =
+            SceneUpdateMutation(
+                input =
+                    SceneUpdateInput(
+                        id = sceneId,
+                        organized = Optional.present(organized),
+                    ),
+            )
+        return executeMutation(mutation).data?.sceneUpdate
+    }
+
     suspend fun deleteScene(
         sceneId: String,
         deleteFiles: Boolean,

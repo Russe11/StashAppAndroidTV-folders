@@ -147,6 +147,12 @@
     <string name="set_studio">Set Studio</string>
     <string name="play_from_here">Play from here</string>
     <string name="add_gallery">Add Gallery</string>
+    <string name="quick_action_mark_organized">Mark organized</string>
+    <string name="quick_action_mark_unorganized">Mark unorganized</string>
+    <string name="quick_action_set_rating_stars">Rate %1$d stars</string>
+    <string name="quick_action_clear_rating">Clear rating</string>
+    <string name="quick_action_increment_o_counter">Increment O-counter</string>
+    <string name="quick_action_add_tag">Add tag</string>
     <string name="play_all_markers">Play all markers</string>
     <string name="submit_without_saving">Submit without saving</string>
     <string name="save_and_submit">Save and submit</string>

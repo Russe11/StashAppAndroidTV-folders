@@ -63,6 +63,15 @@ data class GlobalContext(
 val LocalGlobalContext =
     compositionLocalOf<GlobalContext> { throw IllegalStateException("Shouldn't call this") }
 
+/**
+ * Optimistic, in-memory overrides for scene-card quick-curation edits (organized /
+ * rating / o-counter). Cards read through this so a long-press edit is reflected
+ * immediately, even though the paged list source still holds the pre-edit value.
+ * Defaults to empty so any card composed outside the application shell is unaffected.
+ */
+val LocalSceneCurationOverrides =
+    compositionLocalOf { com.github.damontecres.stashapp.util.SceneCurationOverrides() }
+
 object PlayerContext {
     fun player(
         context: Context,
