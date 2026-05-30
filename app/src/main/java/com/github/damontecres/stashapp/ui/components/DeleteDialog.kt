@@ -70,6 +70,28 @@ private fun ComposeUiConfig.deleteGatePin(): String? =
         appPin = preferences.pinPreferences.pin,
     )
 
+/**
+ * What pressing "confirm" in the delete dialog should do. Permanent disk deletion
+ * is a *management* action; on this viewer it must never run un-gated. So:
+ *  - [PERFORM]      — no disk delete requested (DB row and/or generated files only); run it.
+ *  - [REQUIRE_PIN]  — disk delete requested and a gate PIN exists; step into the PIN gate first.
+ *  - [BLOCK_NO_PIN] — disk delete requested but NO gate PIN is configured; refuse and tell the
+ *                     user to set one (a viewer must not permanently delete files un-gated).
+ *
+ * Pure so it can be unit-tested without Compose. See [deleteGatePin] for how the gate PIN is chosen.
+ */
+enum class DeleteConfirmAction { PERFORM, REQUIRE_PIN, BLOCK_NO_PIN }
+
+fun deleteConfirmAction(
+    deleteFiles: Boolean,
+    gatePin: String?,
+): DeleteConfirmAction =
+    when {
+        !deleteFiles -> DeleteConfirmAction.PERFORM
+        gatePin != null -> DeleteConfirmAction.REQUIRE_PIN
+        else -> DeleteConfirmAction.BLOCK_NO_PIN
+    }
+
 @Composable
 fun DeleteDialog(
     onDeleteConfirm: (deleteFiles: Boolean, deleteGenerated: Boolean) -> Unit,
@@ -100,11 +122,19 @@ fun DeleteDialog(
     }
 
     val onConfirmPressed = {
-        if (deleteFiles && gatePin != null) {
+        when (deleteConfirmAction(deleteFiles, gatePin)) {
             // Step into the PIN-gate before any delete_file=true mutation.
-            awaitingPin = true
-        } else {
-            performDelete()
+            DeleteConfirmAction.REQUIRE_PIN -> awaitingPin = true
+            // Disk deletion was requested but no gate PIN is configured. A viewer
+            // must not permanently delete files un-gated, so refuse and tell the
+            // user how to enable it instead of silently destroying data.
+            DeleteConfirmAction.BLOCK_NO_PIN ->
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.delete_files_requires_pin),
+                    Toast.LENGTH_LONG,
+                ).show()
+            DeleteConfirmAction.PERFORM -> performDelete()
         }
     }
 

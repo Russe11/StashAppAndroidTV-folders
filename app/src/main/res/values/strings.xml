@@ -92,6 +92,7 @@
     <string name="delete_files_permanent_warning">Deleting files removes them permanently from disk. This cannot be undone.</string>
     <string name="delete_enter_pin_to_confirm">Enter your PIN to permanently delete files from disk</string>
     <string name="delete_confirm_files">Permanently delete files</string>
+    <string name="delete_files_requires_pin">Set a PIN (Settings → security) to permanently delete files from this device. File deletion is blocked without one.</string>
     <string name="force_direct">Force direct</string>
     <string name="unsupported">unsupported</string>
     <string name="results">Results</string>
