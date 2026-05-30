@@ -40,6 +40,9 @@ object DeviceBusHost {
     private var bridgeJob: Job? = null
 
     @Volatile
+    private var commandJob: Job? = null
+
+    @Volatile
     private var currentServerUrl: String? = null
 
     @Volatile
@@ -107,6 +110,25 @@ object DeviceBusHost {
         }
     }
 
+    /**
+     * Send a remote command to a target device (CONTROLLER role — R-C "send to device"). Suspends
+     * until the server relays it; returns false if presence isn't active or the send failed. The
+     * caller (the "send to device" UI) supplies scene IDs only — never titles.
+     */
+    suspend fun sendCommand(command: OutgoingDeviceCommand): Boolean = current?.sendCommand(command) ?: false
+
+    /**
+     * Best-effort friendly name for a controller device id, looked up in the current online-devices
+     * list. Used by the TOFU prompt ("Allow <name> to control this device?"). Falls back to a generic
+     * label when the controller can't be resolved (e.g. the server didn't send a controller id —
+     * `fromDeviceId` is currently always empty, see SERVER_SCHEMA notes).
+     */
+    fun controllerName(fromDeviceId: String): String {
+        val id = fromDeviceId.trim()
+        if (id.isEmpty()) return "Another device"
+        return onlineDevices.value.firstOrNull { it.id == id }?.name ?: "Another device"
+    }
+
     private fun startFor(server: StashServer) {
         val ctx = appContext ?: run {
             Log.w(TAG, "deviceBus not installed; skipping start for ${server.url}")
@@ -139,12 +161,22 @@ object DeviceBusHost {
             scope.launch {
                 repo.onlineDevices.collect { _onlineDevices.value = it }
             }
+        // R-C: route every command targeted at this device through the TOFU gate + dispatcher. The
+        // command subscription only runs while opted in, so this adds nothing when presence is off.
+        commandJob =
+            scope.launch {
+                repo.incomingCommands.collect { command ->
+                    RemoteControlHost.onCommand(command)
+                }
+            }
         Log.i(TAG, "deviceBus presence started for ${server.url}")
     }
 
     private fun stopCurrent() {
         bridgeJob?.cancel()
         bridgeJob = null
+        commandJob?.cancel()
+        commandJob = null
         current?.stop()
         current = null
         _onlineDevices.value = emptyList()

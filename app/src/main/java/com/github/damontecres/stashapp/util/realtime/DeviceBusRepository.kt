@@ -60,6 +60,7 @@ class DeviceBusRepository(
     private val register: suspend (DeviceRegistration) -> Unit = { engineProvider().registerDevice(it) },
     private val unregister: suspend (String) -> Unit = { engineProvider().unregisterDevice(it) },
     private val reportState: suspend (PlaybackStateUpdate) -> Unit = { engineProvider().updatePlaybackState(it) },
+    private val sendCommandFn: suspend (OutgoingDeviceCommand) -> Boolean = { engineProvider().sendDeviceCommand(it) },
     private val heartbeatIntervalMillis: Long = HeartbeatLoop.DEFAULT_INTERVAL_MILLIS,
     private val backoff: ReconnectBackoff = ReconnectBackoff(),
     private val delayFn: suspend (Long) -> Unit = { kotlinx.coroutines.delay(it) },
@@ -176,6 +177,23 @@ class DeviceBusRepository(
             throw ce
         } catch (t: Throwable) {
             Log.w(TAG, "updatePlaybackState failed for ${server.url}: ${t.message}")
+        }
+    }
+
+    /**
+     * Send a remote command from this device (acting as a CONTROLLER — R-C) to a target device. The
+     * server relays it; returns true only if a live target subscriber received it. No-op returning
+     * false when presence isn't active (this device hasn't opted in / registered).
+     */
+    suspend fun sendCommand(command: OutgoingDeviceCommand): Boolean {
+        if (!active) return false
+        return try {
+            sendCommandFn(command)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            Log.w(TAG, "sendDeviceCommand failed for ${server.url}: ${t.message}")
+            false
         }
     }
 

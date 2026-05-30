@@ -7,8 +7,10 @@ import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.realtime.DeviceBusHost
 import com.github.damontecres.stashapp.util.realtime.DeviceBusPreferences
+import com.github.damontecres.stashapp.util.realtime.DeviceCommandType
 import com.github.damontecres.stashapp.util.realtime.DeviceIdentity
 import com.github.damontecres.stashapp.util.realtime.OnlineDeviceRow
+import com.github.damontecres.stashapp.util.realtime.OutgoingDeviceCommand
 import com.github.damontecres.stashapp.util.realtime.SceneNameResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -81,4 +83,57 @@ class CrossDeviceViewModel : ViewModel() {
         DeviceIdentity.setDeviceName(context, name)
         _deviceName.value = DeviceIdentity.deviceName(context)
     }
+
+    // -- Controller role (R-C "send to device" / phone-as-remote) --
+
+    private val _selectedTarget = MutableStateFlow<OnlineDeviceRow?>(null)
+
+    /** The target device the user opened a remote for, or null when the remote sheet is closed. */
+    val selectedTarget: StateFlow<OnlineDeviceRow?> = _selectedTarget.asStateFlow()
+
+    /** Open the transport remote for [target] (a device that advertises the PLAY capability). */
+    fun openRemote(target: OnlineDeviceRow) {
+        _selectedTarget.value = target
+    }
+
+    /** Close the transport remote. */
+    fun closeRemote() {
+        _selectedTarget.value = null
+    }
+
+    /**
+     * Send a transport command to the currently-selected target (CONTROLLER role). Scene IDs only —
+     * never titles. No-op if no target is selected. The send goes through the active presence
+     * session ([DeviceBusHost]); a relay failure is swallowed (best-effort remote).
+     */
+    fun sendToSelected(
+        type: DeviceCommandType,
+        sceneId: String? = null,
+        sceneIds: List<String> = emptyList(),
+        startSeconds: Double? = null,
+        seekSeconds: Double? = null,
+    ) {
+        val target = _selectedTarget.value ?: return
+        viewModelScope.launch(StashCoroutineExceptionHandler()) {
+            DeviceBusHost.sendCommand(
+                OutgoingDeviceCommand(
+                    targetDeviceId = target.id,
+                    type = type,
+                    sceneId = sceneId,
+                    sceneIds = sceneIds,
+                    startSeconds = startSeconds,
+                    seekSeconds = seekSeconds,
+                ),
+            )
+        }
+    }
+
+    /**
+     * "Play this scene on the selected target" — the headline send-to-device action. Sends a PLAY
+     * command carrying only the scene id (+ optional resume position).
+     */
+    fun castScene(
+        sceneId: String,
+        startSeconds: Double? = null,
+    ) = sendToSelected(DeviceCommandType.PLAY, sceneId = sceneId, startSeconds = startSeconds)
 }

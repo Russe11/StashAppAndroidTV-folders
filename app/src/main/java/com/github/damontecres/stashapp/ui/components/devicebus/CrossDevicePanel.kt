@@ -17,8 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.stashapp.ui.compat.Button
 import com.github.damontecres.stashapp.ui.components.SwitchWithLabel
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.realtime.DeviceCapability
 import com.github.damontecres.stashapp.util.realtime.DeviceKind
 import com.github.damontecres.stashapp.util.realtime.OnlineDeviceRow
 
@@ -44,6 +46,7 @@ fun CrossDevicePanel(
     val optedIn by viewModel.optedIn.collectAsState()
     val deviceName by viewModel.deviceName.collectAsState()
     val rows by viewModel.rows.collectAsState()
+    val selectedTarget by viewModel.selectedTarget.collectAsState()
 
     Column(
         modifier = modifier.fillMaxWidth().padding(16.dp),
@@ -85,13 +88,28 @@ fun CrossDevicePanel(
         )
 
         if (optedIn) {
-            OnlineDevicesList(rows)
+            val target = selectedTarget
+            if (target != null) {
+                // CONTROLLER role: a transport remote for the chosen target.
+                RemoteControlSheet(
+                    target = target,
+                    onSend = { type, seekSeconds ->
+                        viewModel.sendToSelected(type = type, seekSeconds = seekSeconds)
+                    },
+                    onClose = { viewModel.closeRemote() },
+                )
+            } else {
+                OnlineDevicesList(rows, onControl = { viewModel.openRemote(it) })
+            }
         }
     }
 }
 
 @Composable
-private fun OnlineDevicesList(rows: List<OnlineDeviceRow>) {
+private fun OnlineDevicesList(
+    rows: List<OnlineDeviceRow>,
+    onControl: (OnlineDeviceRow) -> Unit,
+) {
     Text(
         text = "Online devices",
         style = MaterialTheme.typography.titleMedium,
@@ -109,15 +127,19 @@ private fun OnlineDevicesList(rows: List<OnlineDeviceRow>) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(rows, key = { it.id }) { row ->
-            OnlineDeviceItem(row)
+            OnlineDeviceItem(row, onControl = onControl)
         }
     }
 }
 
 @Composable
-private fun OnlineDeviceItem(row: OnlineDeviceRow) {
+private fun OnlineDeviceItem(
+    row: OnlineDeviceRow,
+    onControl: (OnlineDeviceRow) -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             text = "${kindLabel(row.kind)}  ${row.name}",
@@ -128,6 +150,10 @@ private fun OnlineDeviceItem(row: OnlineDeviceRow) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // "Send to device" / remote-control entry — only for devices that can be a playback target.
+        if (DeviceCapability.PLAY in row.capabilities && row.online) {
+            Button(onClick = { onControl(row) }) { Text("Control") }
+        }
     }
 }
 

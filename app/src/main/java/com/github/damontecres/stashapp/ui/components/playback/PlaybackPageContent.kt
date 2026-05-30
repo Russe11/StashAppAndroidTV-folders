@@ -90,6 +90,8 @@ import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.data.VideoFilter
 import com.github.damontecres.stashapp.data.room.PlaybackEffect
 import com.github.damontecres.stashapp.navigation.NavigationManager
+import com.github.damontecres.stashapp.playback.CodecSupport
+import com.github.damontecres.stashapp.playback.Media3RemoteController
 import com.github.damontecres.stashapp.playback.PlaylistFragment
 import com.github.damontecres.stashapp.playback.TrackActivityPlaybackListener
 import com.github.damontecres.stashapp.playback.TrackSupport
@@ -119,6 +121,7 @@ import com.github.damontecres.stashapp.util.StashClient
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.findActivity
+import com.github.damontecres.stashapp.util.realtime.RemoteControlHost
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import com.github.damontecres.stashapp.util.launchDefault
 import com.github.damontecres.stashapp.util.launchIO
@@ -628,8 +631,27 @@ fun PlaybackPageContent(
 
     AmbientPlayerListener(player)
 
+    val remoteControlScope = rememberCoroutineScope()
+
     LifecycleStartEffect(Unit) {
+        // R-C TARGET: bind this live player so remote `deviceCommands` (PLAY/PAUSE/SEEK/STOP/ENQUEUE/
+        // NEXT/PREV) can drive it — but only after the per-controller TOFU confirm upstream. Cheap to
+        // bind unconditionally: nothing routes here unless the user is opted in AND a controller has
+        // been allowed (the command subscription only runs while opted in).
+        val remoteController =
+            Media3RemoteController(
+                player = player,
+                currentSceneIdProvider = { viewModel.state.value.mediaItemTag?.item?.id },
+                enqueueScenes = { sceneIds ->
+                    remoteControlScope.launch(StashCoroutineExceptionHandler()) {
+                        appendScenesToQueue(context, server, uiConfig, player, sceneIds)
+                    }
+                },
+                leavePlayer = { navigationManager.goBack() },
+            )
+        RemoteControlHost.bindPlayer(remoteController)
         onStopOrDispose {
+            RemoteControlHost.unbindPlayer(remoteController)
             savedStartPosition = player.currentPosition
             currentPlaylistIndex = player.currentMediaItemIndex
             StashExoPlayer.releasePlayer()
@@ -1138,6 +1160,54 @@ fun PlaybackPageContent(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Append [sceneIds] to the live player's queue for a remote ENQUEUE command (R-C TARGET). Each scene
+ * is fetched, run through the same stream-decision pipeline the player uses, and added as a tagged
+ * [MediaItem]. Best-effort: a scene that can't be fetched/built is skipped (logged), not fatal. Runs
+ * on a background dispatcher for the fetch + stream decision, then hops to the main thread to mutate
+ * the player. Privacy: only the scene ids that the controller sent are used — never any title.
+ */
+@OptIn(UnstableApi::class)
+private suspend fun appendScenesToQueue(
+    context: android.content.Context,
+    server: StashServer,
+    uiConfig: ComposeUiConfig,
+    player: Player,
+    sceneIds: List<String>,
+) {
+    val queryEngine = QueryEngine(server)
+    val codecs = CodecSupport.getSupportedCodecs(uiConfig.preferences.playbackPreferences)
+    val newItems =
+        withContext(Dispatchers.IO) {
+            sceneIds.mapNotNull { id ->
+                try {
+                    val full = queryEngine.getScene(id) ?: return@mapNotNull null
+                    val scene = com.github.damontecres.stashapp.data.Scene.fromFullSceneData(full)
+                    val decision =
+                        com.github.damontecres.stashapp.playback.getStreamDecision(
+                            context,
+                            scene,
+                            com.github.damontecres.stashapp.playback.PlaybackMode.Choose,
+                            uiConfig.preferences.playbackPreferences.streamChoice,
+                            uiConfig.preferences.playbackPreferences.transcodeAboveResolution,
+                            codecs,
+                        )
+                    com.github.damontecres.stashapp.playback.buildMediaItem(context, decision, scene) {
+                        setTag(PlaylistFragment.MediaItemTag(scene, decision))
+                    }
+                } catch (ex: Exception) {
+                    Timber.w(ex, "ENQUEUE: skipping scene %s (could not build media item)", id)
+                    null
+                }
+            }
+        }
+    if (newItems.isNotEmpty()) {
+        withContext(Dispatchers.Main) {
+            player.addMediaItems(newItems)
         }
     }
 }

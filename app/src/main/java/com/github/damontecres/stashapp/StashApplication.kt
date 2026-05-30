@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.res.Resources
 import android.graphics.Typeface
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.util.Log
 import androidx.annotation.FontRes
@@ -179,6 +181,33 @@ class StashApplication : Application() {
         // OFF) inside the repository — until the user opts in this device never registers and is
         // invisible to others.
         com.github.damontecres.stashapp.util.realtime.DeviceBusHost.install(this)
+        // NG deviceBus control (R-C): install the TARGET-side remote-control host. It obeys incoming
+        // `deviceCommands` (PLAY/PAUSE/SEEK/…) in the player, gated by a per-controller TOFU confirm.
+        // The PLAY launcher opens the player on a scene via navigation (main thread); the controller
+        // name comes from the live online-devices list. Only ever exercised while opted in (the
+        // command subscription only runs then).
+        com.github.damontecres.stashapp.util.realtime.RemoteControlHost.install(
+            context = this,
+            sceneLauncher = { sceneId, startSeconds ->
+                Handler(Looper.getMainLooper()).post {
+                    try {
+                        val nav = navigationManager
+                        nav.navigate(
+                            com.github.damontecres.stashapp.navigation.Destination.Playback(
+                                sceneId = sceneId,
+                                position = ((startSeconds ?: 0.0) * 1000).toLong().coerceAtLeast(0L),
+                                mode = com.github.damontecres.stashapp.playback.PlaybackMode.Choose,
+                            ),
+                        )
+                    } catch (ex: Exception) {
+                        Log.w(TAG, "remote PLAY navigation failed for scene $sceneId", ex)
+                    }
+                }
+            },
+            controllerNameResolver = { fromDeviceId ->
+                com.github.damontecres.stashapp.util.realtime.DeviceBusHost.controllerName(fromDeviceId)
+            },
+        )
     }
 
     override fun getResources(): Resources = Restring.wrapResources(applicationContext, super.getResources())
