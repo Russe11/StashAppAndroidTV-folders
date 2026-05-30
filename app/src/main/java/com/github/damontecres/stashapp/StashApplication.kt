@@ -168,6 +168,12 @@ class StashApplication : Application() {
         com.github.damontecres.stashapp.folders.sync.LibraryIndexerHost.install(
             daoProvider = { database.folderDao() },
         )
+        // NG live-refresh: install the host so it can run the `entityChanged` subscription while
+        // the app is foreground. Capability-gated inside the repository — a no-op on a server
+        // that doesn't advertise `entityChanged`, leaving the existing poll/delta-sync in charge.
+        com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.install(
+            daoProvider = { database.folderDao() },
+        )
     }
 
     override fun getResources(): Resources = Restring.wrapResources(applicationContext, super.getResources())
@@ -201,6 +207,12 @@ class StashApplication : Application() {
     }
 
     inner class LifecycleObserverImpl : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            Log.v(TAG, "LifecycleObserverImpl.onStart")
+            // App is foreground: start the live-refresh WS (capability-gated inside the host).
+            com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.onForeground()
+        }
+
         override fun onPause(owner: LifecycleOwner) {
             Log.v(TAG, "LifecycleObserverImpl.onPause")
             StashExoPlayer.releasePlayer()
@@ -209,6 +221,8 @@ class StashApplication : Application() {
         override fun onStop(owner: LifecycleOwner) {
             Log.v(TAG, "LifecycleObserverImpl.onStop")
             StashExoPlayer.releasePlayer()
+            // App is backgrounded: drop the live-refresh WS until the next foreground.
+            com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.onBackground()
         }
 
         override fun onDestroy(owner: LifecycleOwner) {

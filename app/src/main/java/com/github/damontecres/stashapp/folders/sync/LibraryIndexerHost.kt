@@ -95,6 +95,27 @@ object LibraryIndexerHost {
         }
     }
 
+    /**
+     * Request a delta sync of the current server's folder cache, e.g. because the NG
+     * `entityChanged` live-refresh feed reported a scene create/update
+     * ([com.github.damontecres.stashapp.util.realtime.LiveRefreshRepository]). A no-op unless a
+     * holder for [server] is installed and idle: if a sync is already running we skip rather
+     * than queue, because a delta sync already picks up everything changed up to "now" — the
+     * running pass will see the new rows. Coalescing of bursts happens upstream in the
+     * live-refresh debouncer, so this is called at most once per quiet window.
+     */
+    fun requestDeltaSync(server: StashServer) {
+        scope.launch {
+            mutex.withLock {
+                val holder = current ?: return@withLock
+                if (holder.server.url != server.url) return@withLock
+                if (holder.runJob?.isActive == true) return@withLock
+                val job = scope.launch { holder.indexer.runDeltaSync() }
+                current = holder.copy(runJob = job)
+            }
+        }
+    }
+
     private fun LibraryIndexer.SyncProgress.toUiState(): SyncProgressUiState =
         when (this) {
             is LibraryIndexer.SyncProgress.Idle -> SyncProgressUiState.Idle

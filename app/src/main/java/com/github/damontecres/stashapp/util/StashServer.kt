@@ -234,6 +234,9 @@ data class StashServer(
             StashExoPlayer.releasePlayer()
             StashApplication.currentServer = server
             com.github.damontecres.stashapp.folders.sync.LibraryIndexerHost.currentServerChanged(server)
+            // Restart NG live-refresh against the new server (no-op if not foreground / not
+            // capability-advertised).
+            com.github.damontecres.stashapp.util.realtime.LiveRefreshHost.currentServerChanged(server)
         }
 
         fun removeStashServer(
