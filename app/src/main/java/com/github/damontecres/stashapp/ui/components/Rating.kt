@@ -46,6 +46,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import com.github.damontecres.stashapp.ui.theme.SemanticColors
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -92,8 +93,8 @@ enum class StarRatingPrecision {
     }
 }
 
-val FilledStarColor = Color(0xFFFFC700)
-val EmptyStarColor = Color(0x2AFFC700)
+val FilledStarColor = SemanticColors.RatingStarFilled
+val EmptyStarColor = SemanticColors.RatingStarEmpty
 
 val ratingBarHeight: Dp
     @Composable get() = if (isTvDevice) 32.dp else 48.dp

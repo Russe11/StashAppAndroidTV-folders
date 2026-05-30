@@ -36,16 +36,16 @@ class SetupStep2Ssl(
             GuidedAction
                 .Builder(requireContext())
                 .id(GuidedAction.ACTION_ID_YES)
-                .title("Yes")
-                .description("Pin this server's certificate")
+                .title(getString(R.string.setup_ssl_action_yes_title))
+                .description(getString(R.string.setup_ssl_action_yes_description))
                 .build(),
         )
         actions.add(
             GuidedAction
                 .Builder(requireContext())
                 .id(GuidedAction.ACTION_ID_NO)
-                .title("No")
-                .description("Enter a different URL")
+                .title(getString(R.string.setup_ssl_action_no_title))
+                .description(getString(R.string.setup_ssl_action_no_description))
                 .build(),
         )
     }
@@ -79,9 +79,7 @@ class SetupStep2Ssl(
             }
             // Lead with a short plain-language explanation so the user understands what they are
             // confirming, then the standard prompt with the SHA-256 fingerprint to compare.
-            val explanation =
-                "This server uses a self-signed certificate. Trusting it pins this exact " +
-                    "certificate to this device so only it is accepted for this server.\n\n"
+            val explanation = getString(R.string.setup_ssl_explanation)
             ConfirmationDialogFragment(
                 explanation + getString(R.string.setup_ssl_pin_prompt, prettyFingerprint(fingerprint)),
             ) { dialog, which ->

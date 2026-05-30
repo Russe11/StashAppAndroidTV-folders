@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.MutableLiveData
@@ -54,6 +55,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.tv.material3.surfaceColorAtElevation
+import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.Material3AppTheme
@@ -228,8 +230,8 @@ fun UpdateAppPage(
                 // Denied: tell the user why this blocks the update and offer a shortcut to grant
                 // the permission from the system app settings screen.
                 snackbar.show(
-                    message = "Permission needed to download the update",
-                    actionLabel = "Settings",
+                    message = context.getString(R.string.update_permission_denied_snackbar),
+                    actionLabel = context.getString(R.string.update_permission_denied_settings),
                     onAction = {
                         val intent =
                             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -312,22 +314,20 @@ fun StoragePermissionRationaleDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text(text = "Storage permission needed") },
+        title = { androidx.compose.material3.Text(text = stringResource(R.string.update_storage_permission_title)) },
         text = {
             androidx.compose.material3.Text(
-                text =
-                    "Stash needs storage access to download the update file to your device " +
-                        "before installing it.",
+                text = stringResource(R.string.update_storage_permission_rationale),
             )
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                androidx.compose.material3.Text(text = "Continue")
+                androidx.compose.material3.Text(text = stringResource(R.string.stashapp_actions_continue))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(text = "Cancel")
+                androidx.compose.material3.Text(text = stringResource(R.string.stashapp_actions_cancel))
             }
         },
     )
@@ -416,7 +416,7 @@ fun InstallUpdatePageContent(
                     ).padding(16.dp),
         ) {
             Text(
-                text = "Update available",
+                text = stringResource(R.string.update_available_heading),
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -429,14 +429,14 @@ fun InstallUpdatePageContent(
                 onClick = onInstallRelease,
             ) {
                 Text(
-                    text = "Download and update",
+                    text = stringResource(R.string.update_download_and_install),
                 )
             }
             Button(
                 onClick = onCancel,
             ) {
                 Text(
-                    text = "Cancel",
+                    text = stringResource(R.string.stashapp_actions_cancel),
                 )
             }
         }
@@ -470,7 +470,7 @@ fun DownloadDialog(
                 modifier = Modifier,
             ) {
                 Text(
-                    text = "Downloading",
+                    text = stringResource(R.string.update_downloading),
                     fontSize = 24.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

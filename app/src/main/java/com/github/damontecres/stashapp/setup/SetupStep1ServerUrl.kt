@@ -32,7 +32,7 @@ class SetupStep1ServerUrl : SetupGuidedStepSupportFragment() {
             GuidedAction
                 .Builder(requireContext())
                 .id(SetupFragment.ACTION_SERVER_URL)
-                .title("Server URL")
+                .title(getString(R.string.setup_server_url_action_title))
                 .descriptionInputType(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
                 .descriptionEditable(true)
                 .hasNext(true)
@@ -118,7 +118,7 @@ class SetupStep1ServerUrl : SetupGuidedStepSupportFragment() {
      * case the action row is scrolled off-screen.
      */
     private fun showConnectionError(message: String) {
-        val displayMessage = message.ifBlank { "Could not connect to the server. Check the URL and try again." }
+        val displayMessage = message.ifBlank { getString(R.string.setup_connection_error) }
         val okAction = findActionById(GuidedAction.ACTION_ID_OK)
         if (okAction != null) {
             okAction.description = displayMessage

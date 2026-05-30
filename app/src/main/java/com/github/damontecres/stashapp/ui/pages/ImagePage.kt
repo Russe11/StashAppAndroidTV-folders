@@ -16,7 +16,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -588,7 +591,11 @@ fun ImagePage(
                     modifier =
                         contentModifier
                             .fillMaxSize()
-                            .background(AppColors.TransparentBlack50),
+                            .background(AppColors.TransparentBlack50)
+                            // Keep the overlay chrome (buttons, info, bars) clear of the
+                            // status/nav bars under edge-to-edge; the image layer stays
+                            // full-bleed.
+                            .windowInsetsPadding(WindowInsets.safeDrawing),
                     server = server,
                     player = player,
                     slideshowControls = slideshowControls,

@@ -9,8 +9,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.ui.graphics.Color
 import com.github.damontecres.stashapp.R
+import com.github.damontecres.stashapp.ui.theme.SemanticColors
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.SlimSceneData
@@ -29,8 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
 
 // Quick-action highlight tints for the currently-applied organized/rating state.
-private val OrganizedTint = Color(0xFF66BB6A)
-private val StarTint = Color(0xFFFFC700)
+private val OrganizedTint = SemanticColors.Organized
+private val StarTint = SemanticColors.StarSelected
 
 fun interface LongClicker<T> {
     fun longClick(
