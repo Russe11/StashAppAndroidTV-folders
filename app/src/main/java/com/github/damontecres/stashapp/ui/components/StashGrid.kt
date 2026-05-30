@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -72,6 +76,9 @@ import com.github.damontecres.stashapp.ui.compat.Button
 import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.playback.isBackwardButton
 import com.github.damontecres.stashapp.ui.components.playback.isForwardButton
+import com.github.damontecres.stashapp.ui.components.states.EmptyState
+import com.github.damontecres.stashapp.ui.components.states.PlaceholderCard
+import com.github.damontecres.stashapp.ui.theme.TouchTarget
 import com.github.damontecres.stashapp.ui.isPlayKeyUp
 import com.github.damontecres.stashapp.ui.tryRequestFocus
 import com.github.damontecres.stashapp.ui.util.getPlayDestinationForItem
@@ -80,6 +87,7 @@ import com.github.damontecres.stashapp.util.AlphabetSearchUtils
 import com.github.damontecres.stashapp.util.ComposePager
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.defaultCardHeight
 import com.github.damontecres.stashapp.util.defaultCardWidth
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -357,6 +365,11 @@ fun StashGrid(
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val filterArgs = pager.filter
+    // Aspect ratio of a real card for this data type, so the loading placeholder occupies the
+    // same footprint as the card it stands in for (touch-only; see placeholder branch below).
+    val cardAspectRatio =
+        filterArgs.dataType.defaultCardWidth.toFloat() /
+            filterArgs.dataType.defaultCardHeight.toFloat()
     val firstFocus = remember { FocusRequester() }
     val zeroFocus = remember { FocusRequester() }
     var previouslyFocusedIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -608,57 +621,67 @@ fun StashGrid(
                             hasRequestFocusRun = true
                         }
                     }
-                    StashCard(
-                        modifier =
-                            mod
-                                .ifElse(index == 0, Modifier.focusRequester(zeroFocus))
-                                .onFocusChanged { focusState ->
-                                    if (DEBUG) {
-                                        Log.v(
-                                            TAG,
-                                            "$index isFocused=${focusState.isFocused}",
-                                        )
-                                    }
-                                    if (focusState.isFocused) {
-                                        // Focused, so set that up
-                                        focusOn(index)
-                                        positionCallback?.invoke(columns, index)
-                                    } else if (focusedIndex == index) {
-                                        savedFocusedIndex = index
-                                        // Was focused on this, so mark unfocused
-                                        focusedIndex = -1
-                                    }
-                                },
-                        uiConfig = uiConfig,
-                        item = item,
-                        itemOnClick = {
-                            itemOnClick.onClick(
-                                it,
-                                FilterAndPosition(filterArgs, index),
-                            )
-                        },
-                        longClicker = longClicker,
-                        getFilterAndPosition = {
-                            FilterAndPosition(
-                                filterArgs,
-                                index,
-                            )
-                        },
-                        cardContext =
-                            item?.let { cardContext?.invoke(index, item) }
-                                ?: CardContext.None,
-                    )
+                    if (isNotTvDevice && item == null) {
+                        // On touch, a not-yet-paged slot shows a shimmering placeholder of the
+                        // same footprint instead of an empty gap. TV keeps the StashCard path
+                        // below so D-pad focus traversal is never disrupted.
+                        PlaceholderCard(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(cardAspectRatio),
+                        )
+                    } else {
+                        StashCard(
+                            modifier =
+                                mod
+                                    .ifElse(index == 0, Modifier.focusRequester(zeroFocus))
+                                    .onFocusChanged { focusState ->
+                                        if (DEBUG) {
+                                            Log.v(
+                                                TAG,
+                                                "$index isFocused=${focusState.isFocused}",
+                                            )
+                                        }
+                                        if (focusState.isFocused) {
+                                            // Focused, so set that up
+                                            focusOn(index)
+                                            positionCallback?.invoke(columns, index)
+                                        } else if (focusedIndex == index) {
+                                            savedFocusedIndex = index
+                                            // Was focused on this, so mark unfocused
+                                            focusedIndex = -1
+                                        }
+                                    },
+                            uiConfig = uiConfig,
+                            item = item,
+                            itemOnClick = {
+                                itemOnClick.onClick(
+                                    it,
+                                    FilterAndPosition(filterArgs, index),
+                                )
+                            },
+                            longClicker = longClicker,
+                            getFilterAndPosition = {
+                                FilterAndPosition(
+                                    filterArgs,
+                                    index,
+                                )
+                            },
+                            cardContext =
+                                item?.let { cardContext?.invoke(index, item) }
+                                    ?: CardContext.None,
+                        )
+                    }
                 }
             }
             if (pager.size == 0) {
 //                focusedIndex = -1
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Text(
-                        text = stringResource(R.string.stashapp_studio_tagger_no_results_found),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
+                EmptyState(
+                    title = stringResource(R.string.stashapp_studio_tagger_no_results_found),
+                    icon = Icons.Default.Search,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             if (showFooter) {
                 // Footer
@@ -689,11 +712,20 @@ fun StashGrid(
                     // Can use material3 here since it's only for non-TV
                     androidx.compose.material3.Button(
                         onClick = { jumpToTop() },
-                        modifier = Modifier.padding(32.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        modifier =
+                            Modifier
+                                .padding(32.dp)
+                                // Guarantee a comfortable touch target on phones/tablets.
+                                .sizeIn(
+                                    minWidth = TouchTarget.min,
+                                    minHeight = TouchTarget.min,
+                                ),
                     ) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = null,
+                            contentDescription =
+                                stringResource(R.string.scroll_to_top_back),
                             modifier = Modifier.size(40.dp),
                         )
                     }

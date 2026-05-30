@@ -100,6 +100,7 @@ import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.LongClicker
 import com.github.damontecres.stashapp.ui.components.RowColumn
 import com.github.damontecres.stashapp.ui.components.TitleValueText
+import com.github.damontecres.stashapp.ui.components.states.ErrorState
 import com.github.damontecres.stashapp.ui.components.main.MainPageHeader
 import com.github.damontecres.stashapp.ui.isPlayKeyUp
 import com.github.damontecres.stashapp.ui.tryRequestFocus
@@ -122,6 +123,7 @@ import com.github.damontecres.stashapp.views.formatNumber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -136,30 +138,52 @@ class MainPageViewModel : ViewModel() {
     private val _serverStats = MutableLiveData<StatisticsQuery.Stats?>()
     val serverStats: LiveData<StatisticsQuery.Stats?> = _serverStats
 
+    /**
+     * Whether the home fetch has failed or timed out *and* there are no cached rows to show. The
+     * UI uses this to swap an otherwise-infinite spinner for a retryable error state. Any rows
+     * that did load are kept (this only goes true while [frontPageRows] is empty), so a partial
+     * load never gets blown away.
+     */
+    private val _loadError = MutableLiveData(false)
+    val loadError: LiveData<Boolean> = _loadError
+
     fun init(
         context: Context,
         server: StashServer,
         prefs: StashPreferences,
     ) {
         this.server = server
+        _loadError.value = false
         val pageSize = prefs.searchPreferences.maxResults
         viewModelScope.launch(LoggingCoroutineExceptionHandler(server, viewModelScope)) {
-            val rowTitle = context.getString(R.string.home_newest_videos)
-            val newestRows =
-                withContext(Dispatchers.IO) {
-                    folderDao.newestSceneItems(
-                        serverUrl = server.url,
-                        limit = pageSize,
-                    )
+            try {
+                val rowTitle = context.getString(R.string.home_newest_videos)
+                val newestRows =
+                    withTimeout(HOME_LOAD_TIMEOUT) {
+                        withContext(Dispatchers.IO) {
+                            folderDao.newestSceneItems(
+                                serverUrl = server.url,
+                                limit = pageSize,
+                            )
+                        }
+                    }
+                frontPageRows.clear()
+                frontPageRows.add(
+                    FrontPageParser.FrontPageRow.Success(
+                        name = rowTitle,
+                        filter = homeNewestVideosFilter(rowTitle),
+                        data = newestRows.toHomeNewestScenes(),
+                    ),
+                )
+            } catch (ex: Exception) {
+                // Timeout or fetch failure: surface a retryable error only if nothing loaded.
+                // Cancellation (e.g. the ViewModel being torn down) must propagate untouched.
+                if (ex is kotlinx.coroutines.CancellationException) throw ex
+                Log.e(TAG, "Error loading home newest-videos row", ex)
+                if (frontPageRows.isEmpty()) {
+                    _loadError.value = true
                 }
-            frontPageRows.clear()
-            frontPageRows.add(
-                FrontPageParser.FrontPageRow.Success(
-                    name = rowTitle,
-                    filter = homeNewestVideosFilter(rowTitle),
-                    data = newestRows.toHomeNewestScenes(),
-                ),
-            )
+            }
         }
         // Continue Watching + Recommended are derived from engagement metadata on the server,
         // so they lazily append to the front-page rows as each query resolves (the newest-videos
@@ -391,6 +415,12 @@ private fun homeNewestVideosFilter(name: String): FilterArgs =
             ),
     )
 
+/**
+ * Upper bound on how long the home page waits for its first row before giving up and surfacing a
+ * retryable error (rather than spinning forever). Generous enough to ride out a slow first query.
+ */
+private val HOME_LOAD_TIMEOUT = 10.seconds
+
 /** How many recently-played scenes to sample when building the recommendation profile. */
 private const val RECOMMENDED_SEED_SIZE = 50
 
@@ -513,6 +543,7 @@ fun MainPage(
     val frontPageRows = viewModel.frontPageRows // .observeAsState(listOf())
     val serverStats by viewModel.serverStats.observeAsState()
     val surpriseMeLoading by viewModel.surpriseMeLoading.observeAsState(false)
+    val loadError by viewModel.loadError.observeAsState(false)
     val navigationManager = LocalGlobalContext.current.navigationManager
 
     val focusRequester = remember { FocusRequester() }
@@ -521,13 +552,23 @@ fun MainPage(
         viewModel.updateStatistics()
     }
     if (frontPageRows.isEmpty()) {
-        Box(modifier = modifier.fillMaxSize()) {
-            CircularProgress(
-                modifier =
-                    Modifier
-                        .size(160.dp)
-                        .align(Alignment.Center),
+        if (loadError) {
+            // Fetch failed or timed out with nothing cached: offer a retry instead of an
+            // indefinite spinner. Retry re-runs the same load the page started with.
+            ErrorState(
+                message = stringResource(R.string.stashapp_errors_something_went_wrong),
+                modifier = modifier.fillMaxSize(),
+                onRetry = { viewModel.init(context, server, uiConfig.preferences) },
             )
+        } else {
+            Box(modifier = modifier.fillMaxSize()) {
+                CircularProgress(
+                    modifier =
+                        Modifier
+                            .size(160.dp)
+                            .align(Alignment.Center),
+                )
+            }
         }
     } else {
         LaunchedEffect(server, frontPageRows) {

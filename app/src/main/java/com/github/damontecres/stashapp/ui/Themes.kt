@@ -16,6 +16,8 @@ import androidx.tv.material3.ColorScheme
 import androidx.tv.material3.MaterialTheme
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.proto.ThemeStyle
+import com.github.damontecres.stashapp.ui.theme.StashShapes
+import com.github.damontecres.stashapp.ui.theme.StashTypography
 import com.github.damontecres.stashapp.ui.theme.inversePrimaryDark
 import com.github.damontecres.stashapp.ui.theme.inversePrimaryLight
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
@@ -124,6 +126,8 @@ fun AppTheme(
         MaterialTheme(colorScheme = colorScheme.tvColorScheme) {
             androidx.compose.material3.MaterialTheme(
                 colorScheme = colorScheme.colorScheme,
+                typography = StashTypography,
+                shapes = StashShapes,
                 content = content,
             )
         }

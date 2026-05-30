@@ -52,6 +52,7 @@ import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
 import com.github.damontecres.stashapp.ui.cards.CardContext
+import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.ItemDetailsFooter
 import com.github.damontecres.stashapp.ui.components.ItemOnClicker
 import com.github.damontecres.stashapp.ui.components.ItemsRow
@@ -63,6 +64,7 @@ import com.github.damontecres.stashapp.ui.components.TabProvider
 import com.github.damontecres.stashapp.ui.components.TableRow
 import com.github.damontecres.stashapp.ui.components.TableRowComposable
 import com.github.damontecres.stashapp.ui.components.ratingBarHeight
+import com.github.damontecres.stashapp.ui.components.states.ErrorState
 import com.github.damontecres.stashapp.ui.components.tabFindFilter
 import com.github.damontecres.stashapp.ui.filterArgsSaver
 import com.github.damontecres.stashapp.ui.titleCount
@@ -91,11 +93,14 @@ fun GroupPage(
     onUpdateTitle: ((AnnotatedString) -> Unit)? = null,
 ) {
     var group by remember { mutableStateOf<GroupData?>(null) }
+    var loadError by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableIntStateOf(0) }
     // Remember separately so we don't have refresh the whole page
     var rating100 by remember { mutableIntStateOf(0) }
     var tags by remember { mutableStateOf<List<TagData>>(listOf()) }
     val context = LocalContext.current
-    LaunchedEffect(id) {
+    LaunchedEffect(id, reloadKey) {
+        loadError = false
         try {
             val queryEngine = QueryEngine(server)
             group = queryEngine.getGroup(id)
@@ -106,6 +111,7 @@ fun GroupPage(
         } catch (ex: QueryEngine.QueryException) {
             Log.e(TAG, "No group found with ID $id", ex)
             Toast.makeText(context, "No group found with ID $id", Toast.LENGTH_LONG).show()
+            loadError = true
         }
     }
     val scope = rememberCoroutineScope()
@@ -363,6 +369,16 @@ fun GroupPage(
             modifier,
             onUpdateTitle == null,
         )
+    } ?: run {
+        if (loadError) {
+            ErrorState(
+                message = "Couldn't load this group",
+                modifier = modifier.fillMaxSize(),
+                onRetry = { reloadKey++ },
+            )
+        } else {
+            CircularProgress(modifier = modifier)
+        }
     }
 }
 

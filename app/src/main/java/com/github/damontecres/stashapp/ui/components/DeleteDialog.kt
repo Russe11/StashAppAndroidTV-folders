@@ -46,6 +46,7 @@ import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.PreviewTheme
 import com.github.damontecres.stashapp.ui.PreviewTvSpec
 import com.github.damontecres.stashapp.ui.compat.Button
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.tryRequestFocus
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
 
@@ -140,7 +141,15 @@ fun DeleteDialog(
 
     Dialog(
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(),
+        // Touch: tapping the scrim (or Back) dismisses the dialog. On TV the scrim is not
+        // tap-dismissible (no pointer), so Back / the explicit Cancel button stays the exit.
+        // PIN-gating and the destructive flow are unchanged: dismissing just closes the dialog
+        // without performing any delete.
+        properties =
+            DialogProperties(
+                dismissOnBackPress = true,
+                dismissOnClickOutside = isNotTvDevice,
+            ),
     ) {
         LazyColumn(
             modifier =

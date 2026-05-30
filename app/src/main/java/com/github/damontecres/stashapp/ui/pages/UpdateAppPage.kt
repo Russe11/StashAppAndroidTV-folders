@@ -2,6 +2,9 @@ package com.github.damontecres.stashapp.ui.pages
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,7 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +60,7 @@ import com.github.damontecres.stashapp.ui.Material3AppTheme
 import com.github.damontecres.stashapp.ui.compat.Button
 import com.github.damontecres.stashapp.ui.components.BasicDialog
 import com.github.damontecres.stashapp.ui.components.CircularProgress
+import com.github.damontecres.stashapp.ui.components.states.rememberSnackbarLauncher
 import com.github.damontecres.stashapp.ui.util.DataLoadingState
 import com.github.damontecres.stashapp.ui.util.ifElse
 import com.github.damontecres.stashapp.util.Release
@@ -205,16 +211,44 @@ fun UpdateAppPage(
         viewModel.init(context, composeUiConfig.preferences.updatePreferences.updateUrl)
     }
     var permissions by remember { mutableStateOf(UpdateChecker.hasPermissions(context)) }
+    val snackbar = rememberSnackbarLauncher()
+    // Shows a brief rationale before launching the system permission prompt; carries the release
+    // to install once permission is granted.
+    var rationaleForRelease by remember { mutableStateOf<Release?>(null) }
     val launcher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { isGranted: Boolean ->
             if (isGranted) {
                 permissions = true
+                rationaleForRelease?.let { viewModel.installRelease(context, it) }
+                rationaleForRelease = null
             } else {
-                // TODO
+                rationaleForRelease = null
+                // Denied: tell the user why this blocks the update and offer a shortcut to grant
+                // the permission from the system app settings screen.
+                snackbar.show(
+                    message = "Permission needed to download the update",
+                    actionLabel = "Settings",
+                    onAction = {
+                        val intent =
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                        context.startActivity(intent)
+                    },
+                )
             }
         }
+
+    rationaleForRelease?.let {
+        StoragePermissionRationaleDialog(
+            onConfirm = { launcher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) },
+            onDismiss = { rationaleForRelease = null },
+        )
+    }
+
     when (val state = release) {
         is DataLoadingState.Error -> {
             Text(
@@ -236,7 +270,8 @@ fun UpdateAppPage(
                 release = state.data,
                 onInstallRelease = {
                     if (!permissions) {
-                        launcher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        // Explain why storage access is needed before showing the system prompt.
+                        rationaleForRelease = state.data
                     } else {
                         viewModel.installRelease(context, state.data)
                     }
@@ -264,6 +299,38 @@ fun UpdateAppPage(
             }
         }
     }
+}
+
+/**
+ * Brief rationale shown before requesting the storage permission, explaining why the app needs
+ * it. Confirming launches the system permission prompt; dismissing cancels without prompting.
+ */
+@Composable
+fun StoragePermissionRationaleDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { androidx.compose.material3.Text(text = "Storage permission needed") },
+        text = {
+            androidx.compose.material3.Text(
+                text =
+                    "Stash needs storage access to download the update file to your device " +
+                        "before installing it.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                androidx.compose.material3.Text(text = "Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text(text = "Cancel")
+            }
+        },
+    )
 }
 
 @Composable

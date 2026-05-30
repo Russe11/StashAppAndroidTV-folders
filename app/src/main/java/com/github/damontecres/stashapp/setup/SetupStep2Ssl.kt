@@ -77,8 +77,13 @@ class SetupStep2Ssl(
                 connect(newState)
                 return@launch
             }
+            // Lead with a short plain-language explanation so the user understands what they are
+            // confirming, then the standard prompt with the SHA-256 fingerprint to compare.
+            val explanation =
+                "This server uses a self-signed certificate. Trusting it pins this exact " +
+                    "certificate to this device so only it is accepted for this server.\n\n"
             ConfirmationDialogFragment(
-                getString(R.string.setup_ssl_pin_prompt, prettyFingerprint(fingerprint)),
+                explanation + getString(R.string.setup_ssl_pin_prompt, prettyFingerprint(fingerprint)),
             ) { dialog, which ->
                 if (which == android.content.DialogInterface.BUTTON_POSITIVE) {
                     StashServer.setCertPin(requireContext(), newState.serverUrl, fingerprint)

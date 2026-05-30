@@ -60,21 +60,19 @@ fun Button(
             content = content,
         )
     } else {
-        // TODO this is kind of hack to force tv.Text to use the right color
+        // Force tv.Text to use the right color, then render a properly-styled Material3 button
+        // (theme shape + colors) instead of the bare default.
         CompositionLocalProvider(
             LocalContentColor provides MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
         ) {
-            // TODO handle long click
+            // tv.ButtonColors' properties are internal, so the tv `colors`/`border` params can't be
+            // mapped; use the shared DefaultButtonColors plus the Material3 small shape.
             Button(
                 onClick = onClick,
                 modifier = modifier,
                 enabled = enabled,
-                // TODO tv.ButtonColors' properties are internal, can't copy them, so use defaults
+                shape = androidx.compose.material3.MaterialTheme.shapes.small,
                 colors = DefaultButtonColors,
-                // TODO
-//            shape = shape,
-//            colors = colors,
-//            border = border,
                 contentPadding = contentPadding,
                 interactionSource = interactionSource,
                 content = content,

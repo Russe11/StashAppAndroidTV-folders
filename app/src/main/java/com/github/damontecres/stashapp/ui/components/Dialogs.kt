@@ -9,8 +9,11 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,7 +21,10 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +55,8 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.surfaceColorAtElevation
 import com.github.damontecres.stashapp.ui.FontAwesome
 import com.github.damontecres.stashapp.ui.compat.ListItem
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
+import com.github.damontecres.stashapp.ui.theme.Spacing
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -129,7 +137,25 @@ data class DialogItem(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * On touch, make a [Dialog] dismissible by tapping the scrim (the action menu / option list
+ * is not a TV focus trap there). On TV we keep the caller-supplied [DialogProperties] verbatim
+ * so the existing D-pad/Back handling is untouched. We preserve [DialogProperties.usePlatformDefaultWidth]
+ * so full-width dialogs stay full width.
+ */
+@Composable
+private fun DialogProperties.touchDismissible(): DialogProperties =
+    if (isNotTvDevice) {
+        DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = usePlatformDefaultWidth,
+        )
+    } else {
+        this
+    }
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DialogPopup(
     showDialog: Boolean,
@@ -154,9 +180,66 @@ fun DialogPopup(
         } else {
             waiting = false
         }
+
+        val onItemClick: (DialogItem) -> Unit = { item ->
+            if (dismissOnClick) {
+                onDismissRequest.invoke()
+            }
+            item.onClick.invoke()
+        }
+
+        if (isNotTvDevice) {
+            // Touch: present the same action items as a native Material bottom sheet
+            // (drag handle, tap-outside / swipe-down to dismiss) instead of a centered dialog.
+            val sheetState = rememberModalBottomSheetState()
+            ModalBottomSheet(
+                onDismissRequest = onDismissRequest,
+                sheetState = sheetState,
+                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+            ) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding(),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier =
+                            Modifier.padding(
+                                start = Spacing.lg,
+                                end = Spacing.lg,
+                                bottom = Spacing.sm,
+                            ),
+                    )
+                    dialogItems.forEach { entry ->
+                        when (entry) {
+                            is DialogItemDivider -> HorizontalDivider(Modifier.height(16.dp))
+                            is DialogItem ->
+                                ListItem(
+                                    selected = false,
+                                    enabled = !waiting && entry.enabled,
+                                    onClick = { onItemClick(entry) },
+                                    headlineContent = entry.headlineContent,
+                                    overlineContent = entry.overlineContent,
+                                    supportingContent = entry.supportingContent,
+                                    leadingContent = entry.leadingContent,
+                                    trailingContent = entry.trailingContent,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                        }
+                    }
+                }
+            }
+            return
+        }
+
         Dialog(
             onDismissRequest = onDismissRequest,
-            properties = properties,
+            // Only reached on TV (touch uses the bottom sheet above); touchDismissible() is a no-op there.
+            properties = properties.touchDismissible(),
         ) {
             val elevatedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
             LazyColumn(
@@ -201,12 +284,7 @@ fun DialogPopup(
                             ListItem(
                                 selected = false,
                                 enabled = !waiting && it.enabled,
-                                onClick = {
-                                    if (dismissOnClick) {
-                                        onDismissRequest.invoke()
-                                    }
-                                    it.onClick.invoke()
-                                },
+                                onClick = { onItemClick(it) },
                                 headlineContent = it.headlineContent,
                                 overlineContent = it.overlineContent,
                                 supportingContent = it.supportingContent,
@@ -316,7 +394,8 @@ fun BasicDialog(
 ) {
     Dialog(
         onDismissRequest = onDismissRequest,
-        properties = properties,
+        // Touch: tap-outside / Back dismisses. TV keeps the caller-supplied properties.
+        properties = properties.touchDismissible(),
     ) {
         Box(
             modifier =

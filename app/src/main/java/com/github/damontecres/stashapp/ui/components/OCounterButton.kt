@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
@@ -29,6 +30,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.ui.FontAwesome
 import com.github.damontecres.stashapp.ui.compat.Button
+import com.github.damontecres.stashapp.ui.compat.isNotTvDevice
 import com.github.damontecres.stashapp.ui.components.playback.PlaybackButton
 import com.github.damontecres.stashapp.ui.components.playback.PlaybackFaButton
 import kotlinx.coroutines.delay
@@ -66,11 +68,24 @@ fun OCounterButton(
                     style = MaterialTheme.typography.titleSmall,
                 )
             } else {
-                Icon(
-                    painter = painterResource(R.drawable.sweat_drops),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                )
+                // On touch, keep the 24.dp glyph but guarantee a >= 48.dp hit area around it
+                // without enlarging the icon on TV.
+                val iconHitAreaModifier =
+                    if (isNotTvDevice) {
+                        Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    } else {
+                        Modifier
+                    }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = iconHitAreaModifier,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.sweat_drops),
+                        contentDescription = stringResource(R.string.quick_action_increment_o_counter),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
             Spacer(Modifier.size(8.dp))
             Text(
