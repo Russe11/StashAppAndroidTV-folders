@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.tv.material3.CardBorder
 import androidx.tv.material3.CardColors
 import androidx.tv.material3.CardDefaults
@@ -30,6 +32,7 @@ fun Card(
     interactionSource: MutableInteractionSource? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
     if (LocalDeviceType.current == DeviceType.TV) {
         androidx.tv.material3.Card(
             onClick = onClick,
@@ -57,7 +60,12 @@ fun Card(
                             interactionSource = interactionSource,
                             indication = LocalIndication.current,
                             onClick = onClick,
-                            onLongClick = onLongClick,
+                            onLongClick = onLongClick?.let { original ->
+                                {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    original()
+                                }
+                            },
                         ),
                 content = content,
             )

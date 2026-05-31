@@ -3,21 +3,26 @@ package com.github.damontecres.stashapp.ui.pages
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.runtime.Composable
@@ -175,6 +180,9 @@ fun SearchPage(
     var searchQuery by rememberSaveable { mutableStateOf(initialQuery) }
     val perPage = uiConfig.preferences.searchPreferences.maxResults
 
+    // Touch-only: filter the rendered result sections to a single DataType (null = "All").
+    var selectedType by rememberSaveable { mutableStateOf<DataType?>(null) }
+
     // Touch-only: recent submitted queries, loaded from SharedPreferences and kept in sync.
     var recentSearches by remember { mutableStateOf(emptyList<String>()) }
     var searchBarExpanded by rememberSaveable { mutableStateOf(false) }
@@ -204,6 +212,15 @@ fun SearchPage(
             DataType.IMAGE to images,
             DataType.GALLERY to galleries,
         )
+
+    // Touch-only: drop the type filter if the selected type no longer has results (e.g. the
+    // query changed), so the user is never stuck viewing an empty, unselectable section.
+    val selectedTypeHasResults = selectedType?.let { itemLists[it]!!.isNotEmpty() } ?: true
+    LaunchedEffect(selectedTypeHasResults) {
+        if (touch && !selectedTypeHasResults) {
+            selectedType = null
+        }
+    }
 
     OneTimeLaunchedEffect {
         viewModel.init(server, initialQuery, perPage)
@@ -294,9 +311,26 @@ fun SearchPage(
             }
         }
 
+        // Touch-only: per-type filter chips. Only show types that currently have results;
+        // hide the row entirely unless at least two types have results.
+        if (touch) {
+            val typesWithResults = DataType.entries.filter { itemLists[it]!!.isNotEmpty() }
+            if (typesWithResults.size > 1) {
+                item {
+                    SearchTypeFilterChips(
+                        typesWithResults = typesWithResults,
+                        selectedType = selectedType,
+                        onTypeSelected = { selectedType = it },
+                    )
+                }
+            }
+        }
+
         DataType.entries.forEachIndexed { index, dataType ->
             val data = itemLists[dataType]!!
-            if (data.isNotEmpty()) {
+            // Touch-only: when a type is selected, render only that type's section.
+            val visible = !touch || selectedType == null || selectedType == dataType
+            if (visible && data.isNotEmpty()) {
                 item {
                     HomePageRow(
                         uiConfig = uiConfig,
@@ -379,6 +413,64 @@ fun SearchItemsRow(
                     getFilterAndPosition = null,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Touch-only horizontally-scrollable row of [FilterChip]s for narrowing the search results to a
+ * single [DataType]. A leading "All" chip (selected when [selectedType] is null) shows every
+ * non-empty section. Only [typesWithResults] get a chip; the caller hides the whole row when fewer
+ * than two types have results.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchTypeFilterChips(
+    typesWithResults: List<DataType>,
+    selectedType: DataType?,
+    onTypeSelected: (DataType?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        FilterChip(
+            selected = selectedType == null,
+            onClick = { onTypeSelected(null) },
+            label = {
+                androidx.compose.material3.Text(
+                    text = stringResource(R.string.stashapp_all),
+                )
+            },
+            leadingIcon =
+                if (selectedType == null) {
+                    {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                        )
+                    }
+                } else {
+                    null
+                },
+        )
+        typesWithResults.forEach { dataType ->
+            val selected = selectedType == dataType
+            FilterChip(
+                selected = selected,
+                onClick = { onTypeSelected(dataType) },
+                label = {
+                    androidx.compose.material3.Text(
+                        text = stringResource(dataType.pluralStringId),
+                    )
+                },
+            )
         }
     }
 }
