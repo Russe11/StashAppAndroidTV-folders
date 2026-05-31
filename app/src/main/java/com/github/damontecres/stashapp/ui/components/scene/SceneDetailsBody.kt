@@ -167,7 +167,7 @@ fun LazyListScope.sceneDetailsBody(
     if (suggestions.isNotEmpty()) {
         item {
             ItemsRow(
-                title = titleCount(R.string.suggestions, suggestions),
+                title = titleCount(R.string.more_like_this_scene, suggestions),
                 items = suggestions,
                 uiConfig = uiConfig,
                 itemOnClick = itemOnClick,

@@ -121,6 +121,16 @@ class SceneDetailsViewModel(
         viewModelScope.launch(StashCoroutineExceptionHandler()) {
             scene?.let {
                 suggestions.value = listOf()
+                if (server.serverPreferences.capabilities.supportsSimilarScenes) {
+                    val serverSuggestions =
+                        runCatching {
+                            queryEngine.findSimilarScenes(sceneId = it.id, limit = pageSize)
+                        }.getOrDefault(emptyList())
+                    if (serverSuggestions.isNotEmpty()) {
+                        suggestions.value = serverSuggestions
+                        return@launch
+                    }
+                }
                 val filterArgs = createSceneSuggestionFilter(it)
                 if (filterArgs != null) {
                     val supplier =

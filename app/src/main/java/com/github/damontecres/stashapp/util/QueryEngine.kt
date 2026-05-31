@@ -20,6 +20,7 @@ import com.github.damontecres.stashapp.api.FindPerformersQuery
 import com.github.damontecres.stashapp.api.FindSavedFilterQuery
 import com.github.damontecres.stashapp.api.FindSavedFiltersQuery
 import com.github.damontecres.stashapp.api.FindScenesQuery
+import com.github.damontecres.stashapp.api.FindSimilarScenesQuery
 import com.github.damontecres.stashapp.api.FindSlimImagesQuery
 import com.github.damontecres.stashapp.api.FindStudiosQuery
 import com.github.damontecres.stashapp.api.FindTagsQuery
@@ -134,6 +135,22 @@ class QueryEngine(
     suspend fun getScene(sceneId: String): FullSceneData? {
         val query = client.query(GetSceneQuery(id = sceneId))
         return executeQuery(query).data?.findScene?.fullSceneData
+    }
+
+    suspend fun findSimilarScenes(
+        sceneId: String,
+        distance: Int = 10,
+        limit: Int = 40,
+    ): List<SlimSceneData> {
+        val query =
+            client.query(
+                FindSimilarScenesQuery(
+                    sceneId = sceneId,
+                    distance = distance,
+                    limit = limit,
+                ),
+            )
+        return executeQuery(query).data?.findSimilarScenes?.map { it.scene.slimSceneData }.orEmpty()
     }
 
     suspend fun getVideoScene(sceneId: String): VideoSceneData? {

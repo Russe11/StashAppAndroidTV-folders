@@ -32,6 +32,15 @@ query CountScenes($filter: FindFilterType, $scene_filter: SceneFilterType, $ids:
     }
 }
 
+query FindSimilarScenes($sceneId: ID!, $distance: Int, $limit: Int) {
+    findSimilarScenes(scene_id: $sceneId, distance: $distance, limit: $limit) {
+        distance
+        scene {
+            ...SlimSceneData
+        }
+    }
+}
+
 # Lean projection used only by the Folders library indexer sync. It fetches just
 # the columns the local folder cache stores, avoiding the heavy SlimSceneData
 # graph (urls, details, scene_markers, galleries, studio, groups, performers)

@@ -25,6 +25,7 @@ data class ServerCapabilities(
     val supportsDeletedSince: Boolean get() = supports(FEATURE_DELETED_SINCE)
     val supportsMoveFolder: Boolean get() = supports(FEATURE_MOVE_FOLDER)
     val supportsFolderCounts: Boolean get() = supports(FEATURE_FOLDER_COUNTS)
+    val supportsSimilarScenes: Boolean get() = supports(FEATURE_SIMILAR_SCENES)
 
     /**
      * NG real-time live-refresh: the server advertises the `entityChanged` subscription. Gates
@@ -51,6 +52,7 @@ data class ServerCapabilities(
         const val FEATURE_MOVE_FOLDER = "moveFolder"
         const val FEATURE_FOLDER_COUNTS = "folderCounts"
         const val FEATURE_WEBHOOKS = "webhooks"
+        const val FEATURE_SIMILAR_SCENES = "similarScenes"
         const val FEATURE_ENTITY_CHANGED = "entityChanged"
         const val FEATURE_DEVICE_BUS = "deviceBus"
 

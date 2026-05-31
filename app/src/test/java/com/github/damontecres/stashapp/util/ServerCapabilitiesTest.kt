@@ -17,13 +17,14 @@ class ServerCapabilitiesTest {
             ServerCapabilities(
                 edition = ServerCapabilities.EDITION_NG,
                 apiVersion = 1,
-                features = setOf("deletedSince", "moveFolder"),
+                features = setOf("deletedSince", "moveFolder", "similarScenes"),
                 deletedSinceRetentionDays = 365,
             )
 
         assertTrue(caps.isNg)
         assertTrue(caps.supportsDeletedSince)
         assertTrue(caps.supportsMoveFolder)
+        assertTrue(caps.supportsSimilarScenes)
         // folderCounts/webhooks are not in this server's set, so they gate off.
         assertFalse(caps.supportsFolderCounts)
         assertFalse(caps.supports(ServerCapabilities.FEATURE_WEBHOOKS))
@@ -39,6 +40,7 @@ class ServerCapabilitiesTest {
         assertFalse(caps.supportsDeletedSince)
         assertFalse(caps.supportsMoveFolder)
         assertFalse(caps.supportsFolderCounts)
+        assertFalse(caps.supportsSimilarScenes)
         assertTrue(caps.features.isEmpty())
     }
 }
