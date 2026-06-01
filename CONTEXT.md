@@ -1,15 +1,14 @@
 # Stash Android TV Folders
 
 This context describes the folder-browsing language used by the Android TV app's Folders destination.
+Product-wide entity terms (**Folder**, **Scene**, **Direct scene**, etc.) are defined once in the
+shared glossary [`../docs/glossary.md`](../docs/glossary.md). **Note:** Android calls a Scene a
+**"video"**; "Direct Folder Video" below is Android's name for the shared **Direct scene**.
 
 ## Language
 
-**Folder**:
-A directory in the user's Stash library tree. A folder may contain direct videos and may also contain subfolders.
-_Avoid_: Directory, path, node
-
 **Direct Folder Video**:
-A video whose file is immediately inside the selected folder. Videos inside subfolders are not direct folder videos for the selected folder.
+A video whose file is immediately inside the selected folder. Videos inside subfolders are not direct folder videos for the selected folder. (Android's term for the shared **Direct scene**.)
 _Avoid_: Recursive scene, nested video
 
 **Subfolder Hint**:
